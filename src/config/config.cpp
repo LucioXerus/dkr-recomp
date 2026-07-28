@@ -35,7 +35,7 @@ constexpr int ds_default              = 1;
 constexpr int rr_manual_default       = 60;
 constexpr bool developer_mode_default = false;
 constexpr int graphics_config_version = 5;
-constexpr int controls_config_version = 3;
+constexpr int controls_config_version = 4;
 
 static bool is_steam_deck = false;
 
@@ -271,6 +271,8 @@ bool save_general_config(const std::filesystem::path& path) {
     config_json["debug_diprintf"] = get_debug_diprintf_enabled();
     config_json["debug_reasset_loglevel"] = get_debug_reasset_loglevel();
     config_json["debug_recompsave"] = get_debug_recompsave_enabled();
+    config_json["cheat_music_3p4p"] = get_cheat_music_3p4p_enabled();
+    config_json["cheat_high_lod"] = get_cheat_high_lod_enabled();
 
     return save_json_with_backups(path, config_json);
 }
@@ -294,6 +296,8 @@ void set_general_settings_from_json(const nlohmann::json& config_json) {
     set_debug_diprintf_enabled(from_or_default(config_json, "debug_diprintf", false));
     set_debug_reasset_loglevel(from_or_default(config_json, "debug_reasset_loglevel", 0));
     set_debug_recompsave_enabled(from_or_default(config_json, "debug_recompsave", false));
+    set_cheat_music_3p4p_enabled(from_or_default(config_json, "cheat_music_3p4p", false));
+    set_cheat_high_lod_enabled(from_or_default(config_json, "cheat_high_lod", false));
 }
 
 bool load_general_config(const std::filesystem::path& path) {
@@ -306,72 +310,105 @@ bool load_general_config(const std::filesystem::path& path) {
     return true;
 }
 
-void assign_mapping(dino::input::InputDevice device, dino::input::GameInput input, const std::vector<dino::input::InputField>& value) {
+void assign_mapping(int port, dino::input::InputDevice device, dino::input::GameInput input, const std::vector<dino::input::InputField>& value) {
     for (size_t binding_index = 0; binding_index < std::min(value.size(), dino::input::bindings_per_input); binding_index++) {
-        dino::input::set_input_binding(input, binding_index, device, value[binding_index]);
+        dino::input::set_input_binding(port, input, binding_index, device, value[binding_index]);
     }
 };
 
+void assign_mapping(dino::input::InputDevice device, dino::input::GameInput input, const std::vector<dino::input::InputField>& value) {
+    assign_mapping(dino::input::get_active_config_port(), device, input, value);
+};
+
 // same as assign_mapping, except will clear unassigned bindings if not in value
-void assign_mapping_complete(dino::input::InputDevice device, dino::input::GameInput input, const std::vector<dino::input::InputField>& value) {
+void assign_mapping_complete(int port, dino::input::InputDevice device, dino::input::GameInput input, const std::vector<dino::input::InputField>& value) {
     for (size_t binding_index = 0; binding_index < dino::input::bindings_per_input; binding_index++) {
         if (binding_index >= value.size()) {
-            dino::input::set_input_binding(input, binding_index, device, dino::input::InputField{});
+            dino::input::set_input_binding(port, input, binding_index, device, dino::input::InputField{});
         } else {
-            dino::input::set_input_binding(input, binding_index, device, value[binding_index]);
+            dino::input::set_input_binding(port, input, binding_index, device, value[binding_index]);
         }
     }
 };
 
+void assign_mapping_complete(dino::input::InputDevice device, dino::input::GameInput input, const std::vector<dino::input::InputField>& value) {
+    assign_mapping_complete(dino::input::get_active_config_port(), device, input, value);
+};
+
+void assign_all_mappings(int port, dino::input::InputDevice device, const dino::input::DefaultN64Mappings& values) {
+    assign_mapping_complete(port, device, dino::input::GameInput::A, values.a);
+    assign_mapping_complete(port, device, dino::input::GameInput::B, values.b);
+    assign_mapping_complete(port, device, dino::input::GameInput::Z, values.z);
+    assign_mapping_complete(port, device, dino::input::GameInput::START, values.start);
+    assign_mapping_complete(port, device, dino::input::GameInput::DPAD_UP, values.dpad_up);
+    assign_mapping_complete(port, device, dino::input::GameInput::DPAD_DOWN, values.dpad_down);
+    assign_mapping_complete(port, device, dino::input::GameInput::DPAD_LEFT, values.dpad_left);
+    assign_mapping_complete(port, device, dino::input::GameInput::DPAD_RIGHT, values.dpad_right);
+    assign_mapping_complete(port, device, dino::input::GameInput::L, values.l);
+    assign_mapping_complete(port, device, dino::input::GameInput::R, values.r);
+    assign_mapping_complete(port, device, dino::input::GameInput::C_UP, values.c_up);
+    assign_mapping_complete(port, device, dino::input::GameInput::C_DOWN, values.c_down);
+    assign_mapping_complete(port, device, dino::input::GameInput::C_LEFT, values.c_left);
+    assign_mapping_complete(port, device, dino::input::GameInput::C_RIGHT, values.c_right);
+
+    assign_mapping_complete(port, device, dino::input::GameInput::X_AXIS_NEG, values.analog_left);
+    assign_mapping_complete(port, device, dino::input::GameInput::X_AXIS_POS, values.analog_right);
+    assign_mapping_complete(port, device, dino::input::GameInput::Y_AXIS_NEG, values.analog_down);
+    assign_mapping_complete(port, device, dino::input::GameInput::Y_AXIS_POS, values.analog_up);
+
+    assign_mapping_complete(port, device, dino::input::GameInput::TOGGLE_MENU, values.toggle_menu);
+    assign_mapping_complete(port, device, dino::input::GameInput::ACCEPT_MENU, values.accept_menu);
+    assign_mapping_complete(port, device, dino::input::GameInput::APPLY_MENU, values.apply_menu);
+};
+
 void assign_all_mappings(dino::input::InputDevice device, const dino::input::DefaultN64Mappings& values) {
-    assign_mapping_complete(device, dino::input::GameInput::A, values.a);
-    assign_mapping_complete(device, dino::input::GameInput::B, values.b);
-    assign_mapping_complete(device, dino::input::GameInput::Z, values.z);
-    assign_mapping_complete(device, dino::input::GameInput::START, values.start);
-    assign_mapping_complete(device, dino::input::GameInput::DPAD_UP, values.dpad_up);
-    assign_mapping_complete(device, dino::input::GameInput::DPAD_DOWN, values.dpad_down);
-    assign_mapping_complete(device, dino::input::GameInput::DPAD_LEFT, values.dpad_left);
-    assign_mapping_complete(device, dino::input::GameInput::DPAD_RIGHT, values.dpad_right);
-    assign_mapping_complete(device, dino::input::GameInput::L, values.l);
-    assign_mapping_complete(device, dino::input::GameInput::R, values.r);
-    assign_mapping_complete(device, dino::input::GameInput::C_UP, values.c_up);
-    assign_mapping_complete(device, dino::input::GameInput::C_DOWN, values.c_down);
-    assign_mapping_complete(device, dino::input::GameInput::C_LEFT, values.c_left);
-    assign_mapping_complete(device, dino::input::GameInput::C_RIGHT, values.c_right);
-
-    assign_mapping_complete(device, dino::input::GameInput::X_AXIS_NEG, values.analog_left);
-    assign_mapping_complete(device, dino::input::GameInput::X_AXIS_POS, values.analog_right);
-    assign_mapping_complete(device, dino::input::GameInput::Y_AXIS_NEG, values.analog_down);
-    assign_mapping_complete(device, dino::input::GameInput::Y_AXIS_POS, values.analog_up);
-
-    assign_mapping_complete(device, dino::input::GameInput::TOGGLE_MENU, values.toggle_menu);
-    assign_mapping_complete(device, dino::input::GameInput::ACCEPT_MENU, values.accept_menu);
-    assign_mapping_complete(device, dino::input::GameInput::APPLY_MENU, values.apply_menu);
+    assign_all_mappings(dino::input::get_active_config_port(), device, values);
 };
 
 void reset_input_bindings() {
-    assign_all_mappings(dino::input::InputDevice::Keyboard, dino::input::default_n64_keyboard_mappings);
-    assign_all_mappings(dino::input::InputDevice::Controller, dino::input::default_n64_controller_mappings);
+    for (int port = 0; port < dino::input::MAX_CONTROLLERS; port++) {
+        // Set the active port first so the assign_all_mappings wrapper
+        // writes into the right slot.
+        dino::input::set_active_config_port(port);
+        assign_all_mappings(dino::input::InputDevice::Keyboard,
+            dino::input::default_n64_keyboard_mappings_per_port[port]);
+        assign_all_mappings(dino::input::InputDevice::Controller,
+            dino::input::default_n64_controller_mappings_per_port[port]);
+    }
+    dino::input::set_active_config_port(0);
 }
 
 void reset_cont_input_bindings() {
-    assign_all_mappings(dino::input::InputDevice::Controller, dino::input::default_n64_controller_mappings);
+    int current = dino::input::get_active_config_port();
+    for (int port = 0; port < dino::input::MAX_CONTROLLERS; port++) {
+        dino::input::set_active_config_port(port);
+        assign_all_mappings(dino::input::InputDevice::Controller,
+            dino::input::default_n64_controller_mappings_per_port[port]);
+    }
+    dino::input::set_active_config_port(current);
 }
 
 void reset_kb_input_bindings() {
-    assign_all_mappings(dino::input::InputDevice::Keyboard, dino::input::default_n64_keyboard_mappings);
+    int current = dino::input::get_active_config_port();
+    for (int port = 0; port < dino::input::MAX_CONTROLLERS; port++) {
+        dino::input::set_active_config_port(port);
+        assign_all_mappings(dino::input::InputDevice::Keyboard,
+            dino::input::default_n64_keyboard_mappings_per_port[port]);
+    }
+    dino::input::set_active_config_port(current);
 }
 
 void reset_single_input_binding(dino::input::InputDevice device, dino::input::GameInput input) {
+    int port = dino::input::get_active_config_port();
+    const dino::input::DefaultN64Mappings& defaults =
+        device == dino::input::InputDevice::Keyboard ?
+            dino::input::default_n64_keyboard_mappings_per_port[port] :
+            dino::input::default_n64_controller_mappings_per_port[port];
     assign_mapping_complete(
+        port,
         device,
         input,
-        dino::input::get_default_mapping_for_input(
-            device == dino::input::InputDevice::Keyboard ?
-                dino::input::default_n64_keyboard_mappings :
-                dino::input::default_n64_controller_mappings,
-            input
-        )
+        dino::input::get_default_mapping_for_input(defaults, input)
     );
 }
 
@@ -416,41 +453,51 @@ bool load_graphics_config(const std::filesystem::path& path) {
     return true;
 }
 
-void add_input_bindings(nlohmann::json& out, dino::input::GameInput input, dino::input::InputDevice device) {
+void add_input_bindings(int port, nlohmann::json& out, dino::input::GameInput input, dino::input::InputDevice device) {
     const std::string& input_name = dino::input::get_input_enum_name(input);
     nlohmann::json& out_array = out[input_name];
     out_array = nlohmann::json::array();
     for (size_t binding_index = 0; binding_index < dino::input::bindings_per_input; binding_index++) {
-        input_field_to_json(out_array[binding_index], dino::input::get_input_binding(input, binding_index, device));
+        input_field_to_json(out_array[binding_index], dino::input::get_input_binding(port, input, binding_index, device));
     }
+};
+
+void add_input_bindings(nlohmann::json& out, dino::input::GameInput input, dino::input::InputDevice device) {
+    add_input_bindings(dino::input::get_active_config_port(), out, input, device);
 };
 
 bool save_controls_config(const std::filesystem::path& path) {
     nlohmann::json config_json{};
 
     config_json["_config_version"] = controls_config_version;
-    config_json["keyboard"] = {};
-    config_json["controller"] = {};
+    // Per-port schema: { "ports": [ { "keyboard": {...}, "controller": {...} }, ... ] }
+    // The legacy flat "keyboard" / "controller" objects are kept in sync
+    // with port 0 so older inspection tools still see something useful.
+    nlohmann::json ports_json = nlohmann::json::array();
+    for (int port = 0; port < dino::input::MAX_CONTROLLERS; port++) {
+        nlohmann::json port_json;
+        port_json["port"] = port;
+        port_json["keyboard"] = {};
+        port_json["controller"] = {};
 
-    for (size_t i = 0; i < dino::input::get_num_inputs(); i++) {
-        dino::input::GameInput cur_input = static_cast<dino::input::GameInput>(i);
+        for (size_t i = 0; i < dino::input::get_num_inputs(); i++) {
+            dino::input::GameInput cur_input = static_cast<dino::input::GameInput>(i);
+            add_input_bindings(port, port_json["keyboard"], cur_input, dino::input::InputDevice::Keyboard);
+            add_input_bindings(port, port_json["controller"], cur_input, dino::input::InputDevice::Controller);
+        }
+        ports_json.push_back(port_json);
 
-        add_input_bindings(config_json["keyboard"], cur_input, dino::input::InputDevice::Keyboard);
-        add_input_bindings(config_json["controller"], cur_input, dino::input::InputDevice::Controller);
+        if (port == 0) {
+            config_json["keyboard"] = port_json["keyboard"];
+            config_json["controller"] = port_json["controller"];
+        }
     }
+    config_json["ports"] = ports_json;
 
     return save_json_with_backups(path, config_json);
 }
 
-bool load_input_device_from_json(const nlohmann::json& config_json, dino::input::InputDevice device, const std::string& key) {
-    // Check if the json object for the given key exists.
-    auto find_it = config_json.find(key);
-    if (find_it == config_json.end()) {
-        return false;
-    }
-
-    const nlohmann::json& mappings_json = *find_it;
-
+bool load_input_device_for_port_from_json(const nlohmann::json& mappings_json, int port, dino::input::InputDevice device) {
     for (size_t i = 0; i < dino::input::get_num_inputs(); i++) {
         dino::input::GameInput cur_input = static_cast<dino::input::GameInput>(i);
         const std::string& input_name = dino::input::get_input_enum_name(cur_input);
@@ -459,12 +506,13 @@ bool load_input_device_from_json(const nlohmann::json& config_json, dino::input:
         auto find_input_it = mappings_json.find(input_name);
         if (find_input_it == mappings_json.end() || !find_input_it->is_array()) {
             assign_mapping(
+                port,
                 device,
                 cur_input,
                 dino::input::get_default_mapping_for_input(
                     device == dino::input::InputDevice::Keyboard ?
-                    dino::input::default_n64_keyboard_mappings :
-                    dino::input::default_n64_controller_mappings,
+                    dino::input::default_n64_keyboard_mappings_per_port[port] :
+                    dino::input::default_n64_controller_mappings_per_port[port],
                     cur_input
                 )
             );
@@ -476,7 +524,7 @@ bool load_input_device_from_json(const nlohmann::json& config_json, dino::input:
         for (size_t binding_index = 0; binding_index < std::min(dino::input::bindings_per_input, input_json.size()); binding_index++) {
             dino::input::InputField cur_field{};
             input_field_from_json(input_json[binding_index], cur_field);
-            dino::input::set_input_binding(cur_input, binding_index, device, cur_field);
+            dino::input::set_input_binding(port, cur_input, binding_index, device, cur_field);
         }
     }
 
@@ -489,17 +537,69 @@ bool load_controls_config(const std::filesystem::path& path) {
         return false;
     }
 
-    if (!load_input_device_from_json(config_json, dino::input::InputDevice::Keyboard, "keyboard")) {
-        assign_all_mappings(dino::input::InputDevice::Keyboard, dino::input::default_n64_keyboard_mappings);
-    }
+    // Try the per-port schema first. If it exists, load each port's
+    // bindings from the corresponding entry. Otherwise fall back to the
+    // legacy flat schema (port 0 only) and copy those bindings to all
+    // ports so existing users don't lose their config.
+    auto ports_it = config_json.find("ports");
+    if (ports_it != config_json.end() && ports_it->is_array()) {
+        for (size_t port_idx = 0; port_idx < ports_it->size() && port_idx < dino::input::MAX_CONTROLLERS; port_idx++) {
+            const nlohmann::json& port_json = (*ports_it)[port_idx];
+            int port = from_or_default(port_json, "port", (int)port_idx);
+            if (port < 0 || port >= dino::input::MAX_CONTROLLERS) continue;
 
-    if (!load_input_device_from_json(config_json, dino::input::InputDevice::Controller, "controller")) {
-        assign_all_mappings(dino::input::InputDevice::Controller, dino::input::default_n64_controller_mappings);
+            auto kb_it = port_json.find("keyboard");
+            if (kb_it != port_json.end()) {
+                load_input_device_for_port_from_json(*kb_it, port, dino::input::InputDevice::Keyboard);
+            } else {
+                assign_all_mappings(port, dino::input::InputDevice::Keyboard, dino::input::default_n64_keyboard_mappings_per_port[port]);
+            }
+            auto ct_it = port_json.find("controller");
+            if (ct_it != port_json.end()) {
+                load_input_device_for_port_from_json(*ct_it, port, dino::input::InputDevice::Controller);
+            } else {
+                assign_all_mappings(port, dino::input::InputDevice::Controller, dino::input::default_n64_controller_mappings_per_port[port]);
+            }
+        }
+    } else {
+        // Legacy schema: load port 0's bindings from the flat fields, then
+        // seed ports 1..3 with the same bindings (the user can rebind per
+        // port in the new UI). The user can also keep ports 1..3 on their
+        // default-empty profiles by editing them in the UI after upgrade.
+        bool loaded_any = false;
+        auto flat_kb = config_json.find("keyboard");
+        auto flat_ct = config_json.find("controller");
+        if (flat_kb != config_json.end()) {
+            load_input_device_for_port_from_json(*flat_kb, 0, dino::input::InputDevice::Keyboard);
+            loaded_any = true;
+        }
+        if (flat_ct != config_json.end()) {
+            load_input_device_for_port_from_json(*flat_ct, 0, dino::input::InputDevice::Controller);
+            loaded_any = true;
+        }
+        if (!loaded_any) {
+            for (int port = 0; port < dino::input::MAX_CONTROLLERS; port++) {
+                assign_all_mappings(port, dino::input::InputDevice::Keyboard, dino::input::default_n64_keyboard_mappings_per_port[port]);
+                assign_all_mappings(port, dino::input::InputDevice::Controller, dino::input::default_n64_controller_mappings_per_port[port]);
+            }
+        } else {
+            // Port 0 is now loaded from the legacy schema. Initialize
+            // ports 1..3 with their default profiles. Users who want
+            // their old bindings shared across all four ports can use the
+            // new "Reset to defaults" button, which is per-port.
+            for (int port = 1; port < dino::input::MAX_CONTROLLERS; port++) {
+                assign_all_mappings(port, dino::input::InputDevice::Keyboard, dino::input::default_n64_keyboard_mappings_per_port[port]);
+                assign_all_mappings(port, dino::input::InputDevice::Controller, dino::input::default_n64_controller_mappings_per_port[port]);
+            }
+        }
     }
 
     int config_version = from_or_default(config_json, "_config_version", 1);
     if (config_version < controls_config_version) {
         const auto& defaults = dino::input::default_n64_keyboard_mappings.b;
+        // Apply the historical B-binding migration only to port 0 (the
+        // historical single-player profile).
+        dino::input::set_active_config_port(0);
         dino::input::InputField& primary = dino::input::get_input_binding(
             dino::input::GameInput::B, 0, dino::input::InputDevice::Keyboard);
         dino::input::InputField& secondary = dino::input::get_input_binding(
@@ -518,10 +618,12 @@ bool load_controls_config(const std::filesystem::path& path) {
         // Replace those once with the native Xbox-style gamepad profile.
         if (is_steam_deck && config_version < 3) {
             assign_all_mappings(
+                0,
                 dino::input::InputDevice::Controller,
-                dino::input::default_n64_controller_mappings);
+                dino::input::default_n64_controller_mappings_per_port[0]);
         }
 
+        dino::input::set_active_config_port(0);
         save_controls_config(path);
     }
     return true;

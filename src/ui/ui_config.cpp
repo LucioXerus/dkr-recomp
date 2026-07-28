@@ -480,6 +480,49 @@ void dino::config::set_subtitles_enabled(bool enabled) {
 	}
 }
 
+struct CheatsContext {
+    Rml::DataModelHandle model_handle;
+    std::atomic<int> music_3p4p_enabled = 0;
+    std::atomic<int> high_lod_enabled = 0;
+
+    void reset() {
+        music_3p4p_enabled = 0;
+        high_lod_enabled = 0;
+    }
+    CheatsContext() { reset(); }
+};
+
+static CheatsContext cheats_context;
+
+bool dino::config::get_cheat_music_3p4p_enabled() {
+    return (bool)cheats_context.music_3p4p_enabled.load();
+}
+
+void dino::config::set_cheat_music_3p4p_enabled(bool enabled) {
+    cheats_context.music_3p4p_enabled.store((int)enabled);
+    if (cheats_context.model_handle) {
+        cheats_context.model_handle.DirtyVariable("cheat_music_3p4p_enabled");
+    }
+}
+
+bool dino::config::get_cheat_high_lod_enabled() {
+    return (bool)cheats_context.high_lod_enabled.load();
+}
+
+void dino::config::set_cheat_high_lod_enabled(bool enabled) {
+    cheats_context.high_lod_enabled.store((int)enabled);
+    if (cheats_context.model_handle) {
+        cheats_context.model_handle.DirtyVariable("cheat_high_lod_enabled");
+    }
+}
+
+void dino::config::reset_cheats() {
+    cheats_context.reset();
+    if (cheats_context.model_handle) {
+        cheats_context.model_handle.DirtyAllVariables();
+    }
+}
+
 struct DebugContext {
     Rml::DataModelHandle model_handle;
 	std::atomic<int> debug_dll_logging_enabled = 0;
@@ -591,6 +634,19 @@ public:
                     ? dino::input::InputDevice::Keyboard
                     : dino::input::InputDevice::Controller;
                 controls_model_handle.DirtyVariable("input_device_is_keyboard");
+                controls_model_handle.DirtyVariable("inputs");
+            });
+
+        // Cycle the per-port config view. Pressing the L/R shoulder
+        // buttons (or the equivalent keyboard binding) on the controls
+        // tab moves between P1..P4. The active port is read by every
+        // binding accessor in the data model, so updating it is enough
+        // to repaint the entire controls panel.
+        recompui::register_event(listener, "cycle_config_port",
+            [](const std::string& param, Rml::Event& event) {
+                dino::input::cycle_active_config_port();
+                controls_model_handle.DirtyVariable("active_config_port");
+                controls_model_handle.DirtyVariable("active_config_port_label");
                 controls_model_handle.DirtyVariable("inputs");
             });
     }
@@ -722,6 +778,15 @@ public:
 
         constructor.BindFunc("input_count", [](Rml::Variant& out) { out = static_cast<uint64_t>(dino::input::get_num_inputs()); } );
         constructor.BindFunc("input_device_is_keyboard", [](Rml::Variant& out) { out = cur_device == dino::input::InputDevice::Keyboard; } );
+        constructor.BindFunc("active_config_port", [](Rml::Variant& out) {
+            out = static_cast<int32_t>(dino::input::get_active_config_port());
+        });
+        constructor.BindFunc("active_config_port_label", [](Rml::Variant& out) {
+            out = std::string(dino::input::get_port_label(dino::input::get_active_config_port()));
+        });
+        constructor.BindFunc("max_controllers", [](Rml::Variant& out) {
+            out = static_cast<int32_t>(dino::input::MAX_CONTROLLERS);
+        });
 
         constructor.RegisterTransformFunc("get_input_name", [](const Rml::VariantList& inputs) {
             return Rml::Variant{dino::input::get_input_name(static_cast<dino::input::GameInput>(inputs.at(0).Get<size_t>()))};
@@ -971,10 +1036,26 @@ public:
 		bind_atomic(constructor, debug_context.model_handle, "debug_dll_logging_enabled", &debug_context.debug_dll_logging_enabled);
 		bind_atomic(constructor, debug_context.model_handle, "debug_diprintf_enabled", &debug_context.debug_diprintf_enabled);
 		bind_atomic(constructor, debug_context.model_handle, "debug_reasset_loglevel", &debug_context.debug_reasset_loglevel);
-		bind_atomic(constructor, debug_context.model_handle, "debug_recompsave_enabled", &debug_context.debug_recompsave_enabled);
-		
+        bind_atomic(constructor, debug_context.model_handle, "debug_recompsave_enabled", &debug_context.debug_recompsave_enabled);
+
 		// Register the array type for string vectors.
 		constructor.RegisterArray<std::vector<std::string>>();
+    }
+
+    void make_cheats_bindings(Rml::Context* context) {
+        Rml::DataModelConstructor constructor = context->CreateDataModel("cheats_model");
+        if (!constructor) {
+            throw std::runtime_error("Failed to make RmlUi data model for the cheats menu");
+        }
+
+        cheats_context.model_handle = constructor.GetModelHandle();
+
+        bind_config_list_events(constructor);
+
+        bind_atomic(constructor, cheats_context.model_handle, "cheat_music_3p4p_enabled", &cheats_context.music_3p4p_enabled);
+        bind_atomic(constructor, cheats_context.model_handle, "cheat_high_lod_enabled", &cheats_context.high_lod_enabled);
+
+        constructor.RegisterArray<std::vector<std::string>>();
     }
 
     void make_bindings(Rml::Context* context) override {
@@ -986,6 +1067,7 @@ public:
         make_graphics_bindings(context);
         make_sound_options_bindings(context);
         make_debug_bindings(context);
+        make_cheats_bindings(context);
     }
 };
 

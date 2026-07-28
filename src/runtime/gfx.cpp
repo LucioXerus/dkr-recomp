@@ -6,6 +6,7 @@
 #include "input/input.hpp"
 #include "common/error.hpp"
 #include "common/sdl.hpp"
+#include "recomp_api/cheats.hpp"
 
 #include "../../lib/rt64/src/contrib/stb/stb_image.h"
 

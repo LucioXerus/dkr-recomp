@@ -135,3 +135,32 @@ value = 0x29417FFF # slti at, t2, 0xB -> slti at, t2, 0x7FFF
 vram = 0x80079D24
 func = "__scHandleRetrace"
 value = 0x29817FFF # slti at, t4, 0xB -> slti at, t4, 0x7FFF
+
+# --- Optional cheats --------------------------------------------------------
+# These patches implement the GameShark codes from
+# scripts/E402430D-D2FCFC9D-45.cht. Each patch replaces a single retail
+# instruction with the encoding the cheat authors chose. The corresponding
+# UI flag in the launcher is currently a label-only toggle; the cheat
+# behavior is always on for any build that includes this section. Comment
+# the blocks out (or remove them) to restore the retail instruction.
+#
+# "Music 3P/4P": rewrite the 1P/2P music-vs-silence selector in
+# hud_race_start so 3P/4P races also call level_music_start() instead of
+# music_play(SEQUENCE_NONE). The GameShark code (800A458F -> 0x05) turns
+# the "slti at, v0, 0x2" into a "bltzl" that is never taken; we apply the
+# same instruction-word change at 0x800A458C.
+[[patches.instruction]]
+vram = 0x800A458C
+func = "hud_race_start"
+value = 0x05410002 # slti at, v0, 0x2 -> bltzl v0, +8
+
+# "High LOD": rewrite the per-frame store in set_temp_model_transforms
+# so the highest-LOD model scale is pinned at zero (i.e. no distance-based
+# shrink). The GameShark code (810132F8 -> 0xA200) flips the immediate
+# byte of "sb t0, 0x3A(s0)" from 0x08 to 0x00.
+[[patches.instruction]]
+vram = 0x800132F8
+func = "set_temp_model_transforms"
+value = 0xA200003A # sb t0, 0x3A(s0) -> sb zero, 0x3A(s0)
+
+

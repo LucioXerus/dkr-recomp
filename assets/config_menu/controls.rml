@@ -19,6 +19,16 @@
                             <div class="toggle__icon toggle__icon--right"><div>␽</div></div>
                         </div>
                     </button>
+                    <button
+                        class="button button--secondary"
+                        id="cycle_port_button"
+                        data-event-click="cycle_config_port"
+                        data-class-button--active="active_config_port != 0"
+                        style="nav-down: #input_row_button_0_0; nav-up: #tab_controls"
+                        title="Cycle between Player 1..4"
+                    >
+                        <div class="button__label">{{active_config_port_label}}</div>
+                    </button>
                 </div>
                 <div>
                     <button

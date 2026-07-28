@@ -21,6 +21,7 @@
 #include "recomp_api/debug_ui_api.hpp"
 #include "recomp_api/general_api.hpp"
 #include "recomp_api/recomp_data_api.hpp"
+#include "recomp_api/cheats.hpp"
 #include "common/sdl.hpp"
 #include "ui/recomp_ui.h"
 

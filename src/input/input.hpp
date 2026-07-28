@@ -4,12 +4,19 @@
 #include <vector>
 #include <span>
 #include <string>
+#include <array>
 
 #include "ultramodern/input.hpp"
 
 #include "json/json.hpp"
 
 namespace dino::input {
+    // Maximum number of N64 controller ports we expose to the game.
+    // The N64 natively supports 4 controller ports, and the recomp runtime
+    // (lib/N64ModernRuntime/ultramodern/src/input.cpp) sets MAXCONTROLLERS to 4.
+    // Diddy Kong Racing's multiplayer mode also supports up to 4 players.
+    constexpr int MAX_CONTROLLERS = 4;
+
     // x-macros to build input enums and arrays.
     // First parameter is the enum name, second parameter is the bit field for the input (or 0 if there is no associated one), third is the readable name.
     // TODO: rename for dino
@@ -66,6 +73,14 @@ namespace dino::input {
     };
 
     void poll_inputs();
+    // Per-port variants: port is 0..MAX_CONTROLLERS-1. Port 0 is the original
+    // single-player target. Higher ports index into per-port mapping arrays.
+    float get_input_analog(int port, const InputField& field);
+    float get_input_analog(int port, const std::span<const InputField> fields);
+    bool get_input_digital(int port, const InputField& field);
+    bool get_input_digital(int port, const std::span<const InputField> fields);
+    // Backward-compatible wrappers that operate on port 0. Existing call sites
+    // (UI, nav-help, etc.) keep working without modification.
     float get_input_analog(const InputField& field);
     float get_input_analog(const std::span<const InputField> fields);
     bool get_input_digital(const InputField& field);
@@ -79,6 +94,13 @@ namespace dino::input {
         Keyboard,
         COUNT
     };
+
+    // The currently selected port in the controls configuration menu. Used by
+    // the binding UI to display and edit the right per-port mapping slot.
+    int get_active_config_port();
+    void set_active_config_port(int port);
+    void cycle_active_config_port();
+    const char* get_port_label(int port);
 
     void start_scanning_input(InputDevice device);
     void stop_scanning_input();
@@ -144,10 +166,33 @@ namespace dino::input {
         }
     }
 
+    // Per-port default mappings. Port 0 keeps the original Xbox-style gamepad
+    // defaults. Ports 1..3 are initialized to empty mappings so the player
+    // only rebinds what they actually use. Keyboard mappings remain shared
+    // (the keyboard is treated as a single device, with P1 the default
+    // consumer; P2..P4 keyboard maps default to empty for clarity).
+    extern const std::array<DefaultN64Mappings, MAX_CONTROLLERS> default_n64_controller_mappings_per_port;
+    extern const std::array<DefaultN64Mappings, MAX_CONTROLLERS> default_n64_keyboard_mappings_per_port;
+    // Backward-compat shims for the existing single-player config plumbing.
     extern const DefaultN64Mappings default_n64_keyboard_mappings;
     extern const DefaultN64Mappings default_n64_controller_mappings;
 
     constexpr size_t bindings_per_input = 2;
+
+    // Bindings are now stored per port AND per device. Each input has up to
+    // bindings_per_input slots. The legacy helpers keep their signatures so
+    // that the rest of the codebase does not need to be port-aware, but they
+    // now operate on the active config port (set via the UI).
+    InputField& get_input_binding(GameInput input, size_t binding_index, InputDevice device);
+    void set_input_binding(GameInput input, size_t binding_index, InputDevice device, InputField value);
+    InputField& get_input_binding(int port, GameInput input, size_t binding_index, InputDevice device);
+    void set_input_binding(int port, GameInput input, size_t binding_index, InputDevice device, InputField value);
+
+    // Per-port binding accessors used by get_n64_input when the runtime polls
+    // each controller. These are the bindings actually consulted to produce
+    // the N64 controller packet, NOT the bindings shown in the UI.
+    InputField& get_runtime_input_binding(int port, GameInput input, size_t binding_index, InputDevice device);
+    void set_runtime_input_binding(int port, GameInput input, size_t binding_index, InputDevice device, InputField value);
 
     void set_rumble(int controller_num, bool);
     void update_rumble();

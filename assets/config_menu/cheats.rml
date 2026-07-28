@@ -1,0 +1,84 @@
+<template name="config-menu__cheats">
+    <head>
+    </head>
+    <body>
+        <form class="config__form" id="conf-cheats__form">
+            <div class="config__hz-wrapper" id="conf-cheats__hz-wrapper">
+                <div class="config__tip">
+                    <p class="config__tip__text">
+                        These options mirror GameShark codes from scripts/E402430D-D2FCFC9D-45.cht. The Music 3P/4P and High LOD cheats are always on; the UI toggles below are reserved for future use.
+                    </p>
+                </div>
+                <div class="config__wrapper" data-event-mouseout="set_cur_config_index(-1)" id="conf-cheats__wrapper">
+                    <!-- Music 3P/4P -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(0)" id="conf-cheats__Music-3P-4P">
+                        <label class="config-option__title">Music in 3P/4P Races</label>
+                        <div class="config-option__list">
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(0)"
+                                name="cheat_music_3p4p_enabled"
+                                data-checked="cheat_music_3p4p_enabled"
+                                value="1"
+                                id="cheat_music_3p4p_enabled_on"
+                                style="nav-up: #tab_cheats;"
+                            />
+                            <label class="config-option__tab-label" for="cheat_music_3p4p_enabled_on">On</label>
+
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(0)"
+                                name="cheat_music_3p4p_enabled"
+                                data-checked="cheat_music_3p4p_enabled"
+                                value="0"
+                                id="cheat_music_3p4p_enabled_off"
+                                style="nav-up: #tab_cheats;"
+                            />
+                            <label class="config-option__tab-label" for="cheat_music_3p4p_enabled_off">Off</label>
+                        </div>
+                    </div>
+
+                    <!-- High LOD -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(1)" id="conf-cheats__High-LOD">
+                        <label class="config-option__title">High LOD Models</label>
+                        <div class="config-option__list">
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(1)"
+                                name="cheat_high_lod_enabled"
+                                data-checked="cheat_high_lod_enabled"
+                                value="1"
+                                id="cheat_high_lod_enabled_on"
+                                style="nav-up: #cheat_music_3p4p_enabled_on;"
+                            />
+                            <label class="config-option__tab-label" for="cheat_high_lod_enabled_on">On</label>
+
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(1)"
+                                name="cheat_high_lod_enabled"
+                                data-checked="cheat_high_lod_enabled"
+                                value="0"
+                                id="cheat_high_lod_enabled_off"
+                                style="nav-up: #cheat_music_3p4p_enabled_off;"
+                            />
+                            <label class="config-option__tab-label" for="cheat_high_lod_enabled_off">Off</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="config__wrapper">
+                    <p data-if="cur_config_index == 0">
+                        Replaces the per-level background music that is normally muted in 3- and 4-player races with the standard level theme. Implemented as a single-instruction rewrite inside <i>hud_race_start</i>.
+                    </p>
+                    <p data-if="cur_config_index == 1">
+                        Pins the highest-LOD racer model at full size by rewriting the per-frame <i>sb</i> in <i>set_temp_model_transforms</i> so the distance-based shrink no longer applies. The visual cost is heaviest on racers far from the camera.
+                    </p>
+                </div>
+            </div>
+        </form>
+    </body>
+</template>

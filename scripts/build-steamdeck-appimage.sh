@@ -18,6 +18,17 @@ if [[ -z "$project_version" ]]; then
 fi
 
 if [[ "${DKR_SKIP_COMPILE:-0}" != "1" ]]; then
+    # Regenerate RecompiledFuncs/*.c and rsp/ from the current dkr.us.v80.toml
+    # before invoking the C++ build. The CMake build only knows the .c files
+    # as inputs; without this step, edits to dkr.us.v80.toml (instruction
+    # patches, stubs, ignored, renamed) are silently ignored.
+    if [[ -x "$project_dir/build-tools/N64Recomp" ]] && \
+       [[ -x "$project_dir/build-tools/RSPRecomp" ]]; then
+        N64RECOMP="$project_dir/build-tools/N64Recomp" \
+        RSPRECOMP="$project_dir/build-tools/RSPRecomp" \
+            "$project_dir/scripts/generate-recomp.sh"
+    fi
+
     docker buildx build \
         --platform linux/amd64 \
         --load \
@@ -26,7 +37,7 @@ if [[ "${DKR_SKIP_COMPILE:-0}" != "1" ]]; then
         "$project_dir"
 
     docker run --rm --platform linux/amd64 \
-        --volume "$project_dir:/src" \
+        --volume "$project_dir:/src:z" \
         --workdir /src \
         "$builder_image" \
         cmake -S . -B build-steamdeck -G Ninja \
@@ -35,7 +46,7 @@ if [[ "${DKR_SKIP_COMPILE:-0}" != "1" ]]; then
             -DCMAKE_CXX_COMPILER=clang++
 
     docker run --rm --platform linux/amd64 \
-        --volume "$project_dir:/src" \
+        --volume "$project_dir:/src:z" \
         --workdir /src \
         "$builder_image" \
         cmake --build build-steamdeck --parallel
@@ -62,7 +73,7 @@ if [[ ! -x "$linuxdeploy_dir/AppRun" ]]; then
 
     rm -rf "$linuxdeploy_dir"
     docker run --rm \
-        --volume "$project_dir:/src" \
+        --volume "$project_dir:/src:z" \
         --workdir /src \
         "$builder_image" \
         unsquashfs -o "$squashfs_offset" -d build-steamdeck/linuxdeploy-extracted \
@@ -118,7 +129,7 @@ fi
 rm -f "$dist_dir/$appimage_name"
 
 docker run --rm --platform linux/amd64 \
-    --volume "$project_dir:/src" \
+    --volume "$project_dir:/src:z" \
     --workdir /src/dist-steamdeck \
     --env LDAI_OUTPUT="$appimage_name" \
     "$builder_image" \
@@ -148,7 +159,7 @@ if [[ -z "$runtime_offset" ]]; then
 fi
 
 docker run --rm --platform linux/amd64 \
-    --volume "$project_dir:/src" \
+    --volume "$project_dir:/src:z" \
     --workdir /src \
     --env APPIMAGE_RUNTIME_OFFSET="$runtime_offset" \
     --env APPIMAGE_NAME="$appimage_name" \
@@ -198,7 +209,7 @@ fi
 
 appimage_verify_rel="${appimage_verify_dir#"$project_dir"/}"
 docker run --rm --platform linux/amd64 \
-    --volume "$project_dir:/src" \
+    --volume "$project_dir:/src:z" \
     --workdir /src \
     "$builder_image" \
     unsquashfs -o "$appimage_squashfs_offset" -d "$appimage_verify_rel" \

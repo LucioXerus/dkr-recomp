@@ -142,4 +142,12 @@ namespace dino::config {
 
     bool get_debug_recompsave_enabled();
     void set_debug_recompsave_enabled(bool enabled);
+
+    bool get_cheat_music_3p4p_enabled();
+    void set_cheat_music_3p4p_enabled(bool enabled);
+
+    bool get_cheat_high_lod_enabled();
+    void set_cheat_high_lod_enabled(bool enabled);
+
+    void reset_cheats();
 }
