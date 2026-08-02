@@ -193,7 +193,7 @@ namespace SVG {
 		Vector2f intrinsic_dimensions = doc.intrinsic_dimensions;
 		if (crop_to_content)
 		{
-			const lunasvg::Box smallest_fit = doc.svg_document->boundingBox();
+			const lunasvg::Box smallest_fit = doc.svg_document->box();
 			intrinsic_dimensions.x = static_cast<float>(smallest_fit.w);
 			intrinsic_dimensions.y = static_cast<float>(smallest_fit.h);
 		}
@@ -222,7 +222,7 @@ namespace SVG {
 				lunasvg::Bitmap bitmap;
 				if (crop_to_content)
 				{
-					const lunasvg::Box smallest_fit = svg_document->boundingBox();
+					const lunasvg::Box smallest_fit = svg_document->box();
 
 					lunasvg::Matrix matrix(dimensions.x / svg_document->width(), 0, 0, dimensions.y / svg_document->height(), 0, 0);
 					matrix.scale(svg_document->width() / smallest_fit.w, svg_document->height() / smallest_fit.h);

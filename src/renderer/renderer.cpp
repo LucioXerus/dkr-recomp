@@ -410,7 +410,7 @@ RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle win
     // the launcher preflight temporarily enables it for a bounded table and
     // all unlisted descriptions retain the universal-shader fallback.
     if (dino::config::running_on_steam_deck()) {
-        app->rasterShaderCache->setCompilationEnabled(false);
+        // app->rasterShaderCache->setCompilationEnabled(false);
         app->workloadQueue->ubershadersOnly.store(true, std::memory_order_relaxed);
         fprintf(stderr, "[DKR] Steam Deck runtime shader compilation disabled pending launcher preflight\n");
     }
@@ -466,12 +466,12 @@ void RT64Context::preload_common_shaders() {
             fprintf(stderr, "[DKR] Preloading %zu Steam Deck attract-scene shader pipelines\n",
                 deck_attract_shader_preload.size());
 
-            app->rasterShaderCache->setCompilationEnabled(true);
+            // app->rasterShaderCache->setCompilationEnabled(true);
             for (const RT64::ShaderDescription &shader : deck_attract_shader_preload) {
                 app->rasterShaderCache->submit(shader);
             }
             app->rasterShaderCache->waitForAll();
-            app->rasterShaderCache->setCompilationEnabled(false);
+            // app->rasterShaderCache->setCompilationEnabled(false);
 
             const uint32_t shader_count_after = app->rasterShaderCache->shaderCount();
             app->workloadQueue->ubershadersOnly.store(false, std::memory_order_relaxed);

@@ -2,6 +2,7 @@
 #define __SECTIONS_H__
 
 #include <stdint.h>
+#include <optional>
 #include "recomp.h"
 
 #define ARRLEN(x) (sizeof(x) / sizeof((x)[0]))
@@ -43,6 +44,7 @@ typedef struct {
     RelocEntry* relocs;
     size_t num_relocs;
     size_t index;
+    std::optional<uint32_t> got_ram_addr;
 } SectionTableEntry;
 
 typedef struct {
