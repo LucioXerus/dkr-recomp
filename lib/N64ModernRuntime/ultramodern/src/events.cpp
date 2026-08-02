@@ -1,5 +1,6 @@
 #include <thread>
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <cinttypes>
 #include <variant>
@@ -8,6 +9,7 @@
 #include <mutex>
 #include <queue>
 #include <cstring>
+#include <cstdlib>
 
 #include "blockingconcurrentqueue.h"
 
@@ -26,6 +28,7 @@ void ultramodern::events::set_callbacks(const ultramodern::events::callbacks_t& 
 
 struct SpTaskAction {
     OSTask task;
+    moodycamel::LightweightSemaphore* parsed;
 };
 
 struct ScreenUpdateAction {
@@ -349,6 +352,13 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
     // Notify the caller thread that this thread is ready.
     thread_ready->signal();
 
+    const bool gfx_profile_enabled = std::getenv("DKR_GFX_PROFILE") != nullptr;
+    uint64_t profile_task_count = 0;
+    uint64_t profile_parse_total_us = 0;
+    int64_t profile_parse_max_us = 0;
+    size_t profile_queue_max = 0;
+    auto profile_last_log = std::chrono::steady_clock::now();
+
     while (!exited) {
         // Try to pull an action from the queue
         Action action;
@@ -360,11 +370,6 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
                     renderer_context->enable_instant_present();
                     enabled_instant_present = true;
                 }
-                // Tell the game that the RSP completed instantly. This will allow it to queue other task types, but it won't
-                // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
-                // is finished as well, so sending this early shouldn't be an issue in most cases.
-                // If this causes issues then the logic can be replaced with responding to yield requests.
-                sp_complete();
                 ultramodern::measure_input_latency();
 
                 PTR(u64) displaylist = task_action->task.t.data_ptr;
@@ -374,7 +379,53 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
                 renderer_context->send_dl(&task_action->task);
                 [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
 
+                const auto renderer_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                    renderer_end - renderer_start);
+                if (gfx_profile_enabled) {
+                    const int64_t parse_us = renderer_time.count();
+                    const size_t queue_size = events_context.action_queue.size_approx();
+                    profile_task_count++;
+                    profile_parse_total_us += static_cast<uint64_t>(parse_us);
+                    profile_parse_max_us = std::max(profile_parse_max_us, parse_us);
+                    profile_queue_max = std::max(profile_queue_max, queue_size);
+
+                    const auto profile_now = std::chrono::steady_clock::now();
+                    if ((profile_now - profile_last_log) >= 1s) {
+                        const double average_us = profile_task_count > 0
+                            ? static_cast<double>(profile_parse_total_us) / static_cast<double>(profile_task_count)
+                            : 0.0;
+                        fprintf(stderr,
+                            "[DKR PERF] display-list tasks=%llu parse_avg=%.1f us parse_max=%lld us queue_max=%zu\n",
+                            static_cast<unsigned long long>(profile_task_count), average_us,
+                            static_cast<long long>(profile_parse_max_us), profile_queue_max);
+                        profile_task_count = 0;
+                        profile_parse_total_us = 0;
+                        profile_parse_max_us = 0;
+                        profile_queue_max = 0;
+                        profile_last_log = profile_now;
+                    }
+                }
+                static auto last_slow_renderer_log = std::chrono::high_resolution_clock::time_point{};
+                if ((renderer_time > 25ms) && ((renderer_end - last_slow_renderer_log) > 1s)) {
+                    fprintf(stderr, "[DKR] Slow display-list parse: %lld us (queue: %zu)\n",
+                        static_cast<long long>(renderer_time.count()),
+                        events_context.action_queue.size_approx());
+                    last_slow_renderer_log = renderer_end;
+                }
+
+                // RT64's HLE path reads the task's display list and its referenced
+                // vertex/texture data synchronously in send_dl(). DKR reuses that
+                // memory as soon as it receives SP completion, so acknowledging the
+                // task before parsing finishes races the game against the graphics
+                // thread on slower hosts and produces malformed commands.
+                sp_complete();
                 dp_complete();
+                // The HLE renderer reads display-list, matrix, vertex, and
+                // texture data directly from RDRAM during send_dl(). Release
+                // the submitting game thread only after those reads finish;
+                // DKR starts rebuilding its double-buffered arena immediately
+                // after submission, before it necessarily receives SP/DP.
+                task_action->parsed->signal();
                 // TODO hook the parsed event up to the actual parsing point when a callback is added to RT64.
                 ultramodern::extensions::on_displaylist_parsed(displaylist);
                 ultramodern::extensions::on_displaylist_completed(displaylist);
@@ -559,7 +610,9 @@ void ultramodern::submit_rsp_task(RDRAM_ARG PTR(OSTask) task_) {
 
     // Send gfx tasks to the graphics action queue
     if (task->t.type == M_GFXTASK) {
-        events_context.action_queue.enqueue(SpTaskAction{ *task });
+        moodycamel::LightweightSemaphore parsed{ 0 };
+        events_context.action_queue.enqueue(SpTaskAction{ *task, &parsed });
+        parsed.wait();
     }
     // Set all other tasks as the RSP task
     else {

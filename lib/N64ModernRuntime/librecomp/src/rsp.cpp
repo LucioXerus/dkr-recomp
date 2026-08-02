@@ -35,6 +35,15 @@ void recomp::rsp::constants_init() {
 // Runs a recompiled RSP microcode
 bool recomp::rsp::run_task(uint8_t* rdram, const OSTask* task) {
     assert(rsp_callbacks.get_rsp_microcode != nullptr);
+
+    // DKR can submit an empty startup audio frame as a wrapped negative Acmd
+    // length (0xFFFFFFF8). The original scheduler effectively has no work to
+    // run for that frame; entering the audio microcode would instead dispatch
+    // through an uninitialized command-table entry at address zero.
+    if ((task->t.type == M_AUDTASK) && (static_cast<int32_t>(task->t.data_size) <= 0)) {
+        return true;
+    }
+
     RspUcodeFunc* ucode_func = rsp_callbacks.get_rsp_microcode(task);
 
     if (ucode_func == nullptr) {
