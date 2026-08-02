@@ -60,7 +60,6 @@ rt64.log
 node_modules/
 
 # Recompiler Linux binary
-RSPRecomp
 .DS_Store
 
 # Controller mappings file
