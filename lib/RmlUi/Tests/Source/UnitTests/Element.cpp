@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../Common/Mocks.h"
 #include "../Common/TestsInterface.h"
 #include "../Common/TestsShell.h"
@@ -5,7 +33,6 @@
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
-#include <RmlUi/Core/ElementScroll.h>
 #include <RmlUi/Core/Factory.h>
 #include <doctest.h>
 
@@ -119,6 +146,14 @@ static const String document_scroll_rml = R"(
 </rml>
 )";
 
+void Run(Context* context)
+{
+	context->Update();
+	context->Render();
+
+	TestsShell::RenderLoop();
+}
+
 TEST_CASE("Element")
 {
 	Context* context = TestsShell::GetContext();
@@ -159,8 +194,8 @@ TEST_CASE("Element")
 			MockEventListenerInstancer mockEventListenerInstancer;
 			const auto configureMockEventListenerInstancer = [&](const auto value) {
 				expectations.emplace_back(NAMED_REQUIRE_CALL(mockEventListenerInstancer, InstanceEventListener(value, button))
-						.LR_SIDE_EFFECT(configureMockEventListener())
-						.LR_RETURN(mockEventListener.get()));
+											  .LR_SIDE_EFFECT(configureMockEventListener())
+											  .LR_RETURN(mockEventListener.get()));
 			};
 
 			Factory::RegisterEventListenerInstancer(&mockEventListenerInstancer);
@@ -315,7 +350,7 @@ TEST_CASE("Element.ScrollIntoView")
 	REQUIRE(document);
 	document->Show();
 
-	TestsShell::RenderLoop();
+	Run(context);
 
 	Element* scrollable = document->GetElementById("scrollable");
 	REQUIRE(scrollable);
@@ -339,7 +374,7 @@ TEST_CASE("Element.ScrollIntoView")
 	{
 		cells[2][2]->ScrollIntoView(true);
 
-		TestsShell::RenderLoop();
+		Run(context);
 
 		CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-50, -100));
 		CHECK(cells[2][2]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(50, 0));
@@ -349,7 +384,7 @@ TEST_CASE("Element.ScrollIntoView")
 
 		cells[2][2]->ScrollIntoView(false);
 
-		TestsShell::RenderLoop();
+		Run(context);
 
 		CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-50, -50));
 		CHECK(cells[2][2]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(50, 50));
@@ -361,7 +396,8 @@ TEST_CASE("Element.ScrollIntoView")
 	SUBCASE("AdvancedScroll")
 	{
 		cells[2][2]->ScrollIntoView({ScrollAlignment::Center, ScrollAlignment::Center});
-		TestsShell::RenderLoop();
+
+		Run(context);
 
 		CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-75, -75));
 		CHECK(cells[2][2]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(25, 25));
@@ -370,7 +406,8 @@ TEST_CASE("Element.ScrollIntoView")
 		SUBCASE("NearestAlready")
 		{
 			cells[2][2]->ScrollIntoView(ScrollAlignment::Nearest);
-			TestsShell::RenderLoop();
+
+			Run(context);
 
 			CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-75, -75));
 			CHECK(cells[2][2]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(25, 25));
@@ -380,7 +417,8 @@ TEST_CASE("Element.ScrollIntoView")
 		SUBCASE("NearestBefore")
 		{
 			cells[1][1]->ScrollIntoView(ScrollAlignment::Nearest);
-			TestsShell::RenderLoop();
+
+			Run(context);
 
 			CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-50, -50));
 			CHECK(cells[1][1]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(0, 0));
@@ -390,7 +428,8 @@ TEST_CASE("Element.ScrollIntoView")
 		SUBCASE("NearestAfter")
 		{
 			cells[3][3]->ScrollIntoView(ScrollAlignment::Nearest);
-			TestsShell::RenderLoop();
+
+			Run(context);
 
 			CHECK(cells[1][1]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-50, -50));
 			CHECK(cells[2][2]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(0, 0));
@@ -400,12 +439,12 @@ TEST_CASE("Element.ScrollIntoView")
 		SUBCASE("Smoothscroll")
 		{
 			TestsSystemInterface* system_interface = TestsShell::GetTestsSystemInterface();
-			system_interface->SetManualTime(0);
+			system_interface->SetTime(0);
 			cells[3][3]->ScrollIntoView({ScrollAlignment::Nearest, ScrollAlignment::Nearest, ScrollBehavior::Smooth});
 
 			constexpr double dt = 1.0 / 15.0;
-			system_interface->SetManualTime(dt);
-			TestsShell::RenderLoop();
+			system_interface->SetTime(dt);
+			Run(context);
 
 			// We don't define the exact offset at this time step, but it should be somewhere between the start and end offsets.
 			Vector2f offset = cells[3][3]->GetAbsoluteOffset(Rml::BoxArea::Border);
@@ -417,71 +456,13 @@ TEST_CASE("Element.ScrollIntoView")
 			// After one second it should be at the destination offset.
 			for (double t = 2.0 * dt; t < 1.0; t += dt)
 			{
-				system_interface->SetManualTime(t);
-				context->Update();
-				context->Render();
+				system_interface->SetTime(t);
+				Run(context);
 			}
-			TestsShell::RenderLoop();
 			CHECK(cells[3][3]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(50, 50));
 		}
 	}
 
-	SUBCASE("Adaptive")
-	{
-		cells[2][2]->ScrollIntoView({ScrollAlignment::Adaptive, ScrollAlignment::Adaptive});
-		CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-75, -75));
-		TestsShell::RenderLoop();
-
-		cells[2][2]->ScrollIntoView({ScrollAlignment::End, ScrollAlignment::End});
-		REQUIRE(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-50, -50));
-
-		cells[2][2]->ScrollIntoView({ScrollAlignment::Adaptive, ScrollAlignment::Adaptive});
-		CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-50, -50));
-
-		cells[1][1]->ScrollIntoView({ScrollAlignment::Adaptive, ScrollAlignment::Adaptive});
-		CHECK(cells[0][0]->GetAbsoluteOffset(Rml::BoxArea::Border) == Vector2f(-50, -50));
-	}
-
 	document->Close();
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("Element.ScrollbarDestruction")
-{
-	const String document_rml = R"(
-<rml>
-<head>
-	<link type="text/rcss" href="/assets/rml.rcss"/>
-	<style>
-		#scroll {
-			display: block;
-			width: 200px;
-			height: 100px;
-			overflow-y: scroll;
-		}
-		#scroll div {
-			height: 300px;
-		}
-	</style>
-</head>
-<body>
-	<div id="scroll"><div/></div>
-</body>
-</rml>
-)";
-
-	// Run under address sanitizer to verify that destruction of ElementScroll do not lead to use-after-free within ~Element.
-	Context* context = TestsShell::GetContext();
-	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
-	document->Show();
-
-	Element* scroll = document->GetElementById("scroll");
-	REQUIRE(scroll->GetElementScroll()->GetScrollbar(ElementScroll::VERTICAL) != nullptr);
-
-	scroll->GetParentNode()->RemoveChild(scroll);
-
-	document->Close();
-	context->Update();
-
 	TestsShell::ShutdownShell();
 }

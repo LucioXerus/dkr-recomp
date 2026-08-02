@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../Common/TestsInterface.h"
 #include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/Element.h>
@@ -13,10 +41,9 @@ namespace Rml {
 class TestPropertySpecification {
 public:
 	using SplitOption = PropertySpecification::SplitOption;
-	using ParsePropertyResult = PropertySpecification::ParsePropertyResult;
 	TestPropertySpecification(const PropertySpecification& specification) : specification(specification) {}
 
-	ParsePropertyResult ParsePropertyValues(StringList& values_list, const String& values, SplitOption split_option) const
+	bool ParsePropertyValues(StringList& values_list, const String& values, SplitOption split_option) const
 	{
 		return specification.ParsePropertyValues(values_list, values, split_option);
 	}
@@ -50,7 +77,6 @@ TEST_CASE("PropertySpecification.ParsePropertyValues")
 	Rml::Initialise();
 
 	using SplitOption = TestPropertySpecification::SplitOption;
-	using ParsePropertyResult = TestPropertySpecification::ParsePropertyResult;
 	const TestPropertySpecification& specification = TestPropertySpecification(StyleSheetSpecification::GetPropertySpecification());
 
 	struct Expected {
@@ -59,16 +85,15 @@ TEST_CASE("PropertySpecification.ParsePropertyValues")
 		StringList values;
 	};
 
-	auto Parse = [&](const String& test_value, const Expected& expected, SplitOption split = SplitOption::Whitespace,
-					 ParsePropertyResult expected_result = ParsePropertyResult::Success) {
+	auto Parse = [&](const String& test_value, const Expected& expected, SplitOption split = SplitOption::Whitespace) {
 		StringList parsed_values;
-		ParsePropertyResult result = specification.ParsePropertyValues(parsed_values, test_value, split);
+		bool success = specification.ParsePropertyValues(parsed_values, test_value, split);
 		const String split_str[] = {"none", "whitespace", "comma"};
 
 		INFO("\n\tSplit:     ", split_str[(int)split], "\n\tInput:     ", test_value, "\n\tExpected: ", Stringify(expected.values),
-			"\n\tParsed:   ", Stringify(parsed_values));
+			"\n\tResult:   ", Stringify(parsed_values));
+		CHECK(success);
 		CHECK(parsed_values == expected.values);
-		CHECK(result == expected_result);
 	};
 
 	Parse("red", "red");
@@ -101,21 +126,10 @@ TEST_CASE("PropertySpecification.ParsePropertyValues")
 	Parse("none,,,red", {"none", "red"}, SplitOption::Comma);
 	Parse("none, ,  ,red", {"none", "red"}, SplitOption::Comma);
 
-	Parse(R"("name")", {R"("name")"}, SplitOption::Comma);
-	Parse(R"("name" none)", {R"("name" none)"}, SplitOption::Comma);
-	Parse(R"(none "name")", {R"(none "name")"}, SplitOption::Comma);
-	Parse(R"( none "name" )", {R"(none "name")"}, SplitOption::Comma);
-	Parse(R"( "name", red )", {R"("name")", R"(red)"}, SplitOption::Comma);
-	Parse(R"( "name", "red" )", {R"("name")", R"("red")"}, SplitOption::Comma);
-	Parse(R"( "name", none "red" )", {R"("name")", R"(none "red")"}, SplitOption::Comma);
-
 	Parse("\"string with spaces\"", "string with spaces");
 	Parse("\"string with spaces\" two", {"string with spaces", "two"});
 	Parse("\"string with spaces\"two", {"string with spaces", "two"});
-
-	Parse("\"string\"two", {}, SplitOption::None, ParsePropertyResult::Error);
-	Parse("one\"string\"", {}, SplitOption::None, ParsePropertyResult::Error);
-	Parse("one \"string\"", {}, SplitOption::None, ParsePropertyResult::Error);
+	Parse("\"string with spaces\"two", "string with spaces two", SplitOption::None);
 
 	Parse("\"string (with) ((parenthesis\" two", {"string (with) ((parenthesis", "two"});
 	Parse("\"none,,red\" two", {"none,,red", "two"});
@@ -154,133 +168,6 @@ TEST_CASE("PropertySpecification.ParsePropertyValues")
 	Parse(R"(image("a\\b"))", R"(image("a\b"))");
 	Parse(R"(image("a\\\b"))", R"(image("a\\b"))");
 	Parse(R"(image("a\\\\b"))", R"(image("a\\b"))");
-
-	Parse(R"()", {}, SplitOption::Whitespace, ParsePropertyResult::Error);
-	Parse(R"("")", R"()");
-	Parse(R"(" ")", R"( )");
-	Parse(R"("abc")", R"(abc)");
-	Parse(R"( "abc" )", R"(abc)");
-	Parse(R"(" abc")", R"( abc)");
-	Parse(R"("abc ")", R"(abc )");
-	Parse(R"(" abc ")", R"( abc )");
-	Parse(R"("test"  none)", {R"(test)", R"(none)"});
-
-	Parse(R"('')", R"()");
-	Parse(R"(' ')", R"( )");
-	Parse(R"('abc')", R"(abc)");
-	Parse(R"( 'abc' )", R"(abc)");
-	Parse(R"(' abc')", R"( abc)");
-	Parse(R"('abc ')", R"(abc )");
-	Parse(R"(' abc ')", R"( abc )");
-	Parse(R"('test'  none)", {R"(test)", R"(none)"});
-
-	Parse(R"()", {}, SplitOption::None, ParsePropertyResult::Error);
-	Parse(R"("")", R"()", SplitOption::None);
-	Parse(R"(" ")", R"( )", SplitOption::None);
-	Parse(R"("abc")", R"(abc)", SplitOption::None);
-	Parse(R"( "abc" )", R"(abc)", SplitOption::None);
-	Parse(R"(" abc")", R"( abc)", SplitOption::None);
-	Parse(R"("abc ")", R"(abc )", SplitOption::None);
-	Parse(R"(" abc ")", R"( abc )", SplitOption::None);
-	Parse(R"("test"  none)", {}, SplitOption::None, ParsePropertyResult::Error);
-
-	Parse(R"("","")", {R"("")", R"("")"}, SplitOption::Comma);
-	Parse(R"(" "," ")", {R"(" ")", R"(" ")"}, SplitOption::Comma);
-	Parse(R"(" " , " ")", {R"(" ")", R"(" ")"}, SplitOption::Comma);
-	Parse(R"( " " none, yes)", {R"(" " none)", R"(yes)"}, SplitOption::Comma);
-
-	Parse(R"('','')", {R"('')", R"('')"}, SplitOption::Comma);
-	Parse(R"(' ',' ')", {R"(' ')", R"(' ')"}, SplitOption::Comma);
-	Parse(R"(' ' , ' ')", {R"(' ')", R"(' ')"}, SplitOption::Comma);
-	Parse(R"( ' ' none, yes)", {R"(' ' none)", R"(yes)"}, SplitOption::Comma);
-
-	Parse("var(--x)", {}, SplitOption::None, ParsePropertyResult::ContainsVariable);
-	Parse("var(--x, 10px)", {}, SplitOption::None, ParsePropertyResult::ContainsVariable);
-	Parse("10px var(--x)", {}, SplitOption::Whitespace, ParsePropertyResult::ContainsVariable);
-	Parse("var(--x) var(--y)", {}, SplitOption::Whitespace, ParsePropertyResult::ContainsVariable);
-	Parse("var(--x), var(--y)", {}, SplitOption::Comma, ParsePropertyResult::ContainsVariable);
-	Parse("calc(var(--x) + 2px)", {}, SplitOption::None, ParsePropertyResult::ContainsVariable);
-	Parse("rgba(var(--r), 0, 0, 1)", {}, SplitOption::None, ParsePropertyResult::ContainsVariable);
-
-	Parse("var", "var", SplitOption::None, ParsePropertyResult::Success);
-	Parse("myvar(x)", "myvar(x)", SplitOption::None, ParsePropertyResult::Success);
-	Parse("avar(x)", "avar(x)", SplitOption::None, ParsePropertyResult::Success);
-	Parse("varx(--x)", "varx(--x)", SplitOption::None, ParsePropertyResult::Success);
-	Parse(R"V("var(--x)")V", R"V(var(--x))V", SplitOption::None, ParsePropertyResult::Success);
-
-	Parse("", {}, SplitOption::None, ParsePropertyResult::Error);
-	Parse("(unbalanced", {}, SplitOption::None, ParsePropertyResult::Error);
-	Parse(R"("unterminated)", {}, SplitOption::None, ParsePropertyResult::Error);
-	Parse(R"("a"b)", {}, SplitOption::None, ParsePropertyResult::Error);
-
-	Rml::Shutdown();
-}
-
-TEST_CASE("PropertySpecification.ParsePropertyDeclaration.variables")
-{
-	TestsSystemInterface system_interface;
-	TestsRenderInterface render_interface;
-	SetRenderInterface(&render_interface);
-	SetSystemInterface(&system_interface);
-	Rml::Initialise();
-
-	SUBCASE("plain property")
-	{
-		auto ParseProperty = [](const String& name, const String& value, Unit expected_unit) {
-			INFO(name, ": ", value);
-			PropertyDictionary dictionary;
-			REQUIRE(StyleSheetSpecification::ParsePropertyDeclaration(dictionary, name, value));
-			REQUIRE(dictionary.GetProperties().size() == 1);
-			const Property& property = dictionary.GetProperties().begin()->second;
-			CHECK(property.unit == expected_unit);
-		};
-
-		ParseProperty("width", "10px", Unit::PX);
-		ParseProperty("width", "var(--w)", Unit::VAR_EXPRESSION);
-		ParseProperty("width", "calc(var(--w) * 2)", Unit::VAR_EXPRESSION);
-	}
-
-	SUBCASE("custom property")
-	{
-		auto ParseCustom = [](const String& name, const String& value, bool expected_result, Unit expected_unit) {
-			INFO(name, ": ", value);
-			PropertyDictionary dictionary;
-			CHECK(StyleSheetSpecification::ParsePropertyDeclaration(dictionary, name, value) == expected_result);
-			if (!expected_result)
-				return;
-			const Property* property = dictionary.GetCustomProperty(name);
-			CHECK(property->unit == expected_unit);
-		};
-
-		ParseCustom("--x", "10px", true, Unit::STRING);
-		ParseCustom("--x", "", true, Unit::STRING);
-		ParseCustom("--x", "var(--y)", true, Unit::VAR_EXPRESSION);
-		ParseCustom("--x", "calc(var(--y) + 2px)", true, Unit::VAR_EXPRESSION);
-		ParseCustom("--x", "(unbalanced", false, {});
-	}
-
-	SUBCASE("shorthand")
-	{
-		auto ParseShorthand = [](const String& name, const String& value, bool expected_variable) {
-			INFO(name, ": ", value);
-			PropertyDictionary dictionary;
-			REQUIRE(StyleSheetSpecification::ParsePropertyDeclaration(dictionary, name, value));
-			if (expected_variable)
-			{
-				REQUIRE(dictionary.GetVarShorthands().size() == 1);
-				const Property& property = dictionary.GetVarShorthands().begin()->second;
-				CHECK(property.unit == Unit::VAR_EXPRESSION);
-			}
-			else
-			{
-				CHECK(dictionary.GetVarShorthands().empty());
-			}
-		};
-
-		ParseShorthand("margin", "10px", false);
-		ParseShorthand("margin", "var(--m)", true);
-		ParseShorthand("margin", "10px var(--m)", true);
-	}
 
 	Rml::Shutdown();
 }
@@ -416,42 +303,42 @@ TEST_CASE("PropertyParser.InvalidShorthands")
 		String value;
 	};
 	Vector<TestCase> tests = {
-		{true, "margin", "10px "},                                  //
-		{true, "margin", "10px 20px "},                             //
-		{true, "margin", "10px 20px 30px "},                        //
-		{true, "margin", "10px 20px 30px 40px"},                    //
-		{false, "margin", ""},                                      // Too few values
-		{false, "margin", "10px 20px 30px 40px 50px"},              // Too many values
+		{true, "margin", "10px "},                     //
+		{true, "margin", "10px 20px "},                //
+		{true, "margin", "10px 20px 30px "},           //
+		{true, "margin", "10px 20px 30px 40px"},       //
+		{false, "margin", ""},                         // Too few values
+		{false, "margin", "10px 20px 30px 40px 50px"}, // Too many values
 
-		{true, "flex", "1 2 3px"},                                  //
-		{false, "flex", "1 2 3px 4"},                               // Too many values
-		{false, "flex", "1px 2 3 4"},                               // Wrong order
+		{true, "flex", "1 2 3px"},    //
+		{false, "flex", "1 2 3px 4"}, // Too many values
+		{false, "flex", "1px 2 3 4"}, // Wrong order
 
-		{true, "perspective-origin", "center center"},              //
-		{true, "perspective-origin", "left top"},                   //
-		{false, "perspective-origin", "center center center"},      // Too many values
-		{false, "perspective-origin", "left top 50px"},             // Too many values
-		{false, "perspective-origin", "50px 50px left"},            // Too many values
-		{false, "perspective-origin", "top left"},                  // Wrong order
-		{false, "perspective-origin", "50px left"},                 // Wrong order
+		{true, "perspective-origin", "center center"},         //
+		{true, "perspective-origin", "left top"},              //
+		{false, "perspective-origin", "center center center"}, // Too many values
+		{false, "perspective-origin", "left top 50px"},        // Too many values
+		{false, "perspective-origin", "50px 50px left"},       // Too many values
+		{false, "perspective-origin", "top left"},             // Wrong order
+		{false, "perspective-origin", "50px left"},            // Wrong order
 
-		{true, "font", "20px arial"},                               //
-		{false, "font", "arial 20px"},                              // Wrong order
+		{true, "font", "20px arial"},  //
+		{false, "font", "arial 20px"}, // Wrong order
 
-		{true, "decorator", "gradient(vertical blue red)"},         //
-		{false, "decorator", "gradient(blue red vertical)"},        // Wrong order
-		{false, "decorator", "gradient(blue vertical red)"},        // Wrong order
-		{false, "decorator", "gradient(vertical blue red green)"},  // Too many values
+		{true, "decorator", "gradient(vertical blue red)"},        //
+		{false, "decorator", "gradient(blue red vertical)"},       // Wrong order
+		{false, "decorator", "gradient(blue vertical red)"},       // Wrong order
+		{false, "decorator", "gradient(vertical blue red green)"}, // Too many values
 
 		{true, "filter", "drop-shadow(blue 10px 20px 30px)"},       //
 		{false, "filter", "drop-shadow(10px 20px 30px blue)"},      // Wrong order
 		{false, "filter", "drop-shadow(10px blue 20px 30px)"},      // Wrong order
 		{false, "filter", "drop-shadow(blue 10px 20px 30px 40px)"}, // Too many values
 
-		{true, "overflow", "hidden"},                               //
-		{true, "overflow", "scroll hidden"},                        //
-		{false, "overflow", ""},                                    // Too few values
-		{false, "overflow", "scroll hidden scroll"},                // Too many values
+		{true, "overflow", "hidden"},                //
+		{true, "overflow", "scroll hidden"},         //
+		{false, "overflow", ""},                     // Too few values
+		{false, "overflow", "scroll hidden scroll"}, // Too many values
 	};
 
 	for (const TestCase& test : tests)

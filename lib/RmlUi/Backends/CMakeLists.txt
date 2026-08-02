@@ -11,21 +11,6 @@ target_sources(rmlui_backend_common_headers INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Backend.h"
 )
 
-if(RMLUI_BACKEND_SIMULATE_TOUCH)
-	set(RMLUI_BACKEND_SIMULATE_TOUCH_SUPPORTED
-		"SDL_GL2"
-		"SDL_GL3"
-		"SDL_VK"
-		"SDL_SDLrenderer"
-		"SDL_GPU"
-	)
-	if(NOT RMLUI_BACKEND IN_LIST RMLUI_BACKEND_SIMULATE_TOUCH_SUPPORTED)
-		message(WARNING "RMLUI_BACKEND_SIMULATE_TOUCH enabled but not supported on selected backend ${RMLUI_BACKEND}")
-	else()
-		target_compile_definitions(rmlui_backend_common_headers INTERFACE "RMLUI_BACKEND_SIMULATE_TOUCH")
-	endif()
-endif()
-
 add_library(rmlui_backend_Win32_GL2 INTERFACE)
 target_sources(rmlui_backend_Win32_GL2 INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_Win32.cpp"
@@ -48,17 +33,6 @@ target_sources(rmlui_backend_Win32_VK INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Vulkan/ShadersCompiledSPV.h"
 )
 target_link_libraries(rmlui_backend_Win32_VK INTERFACE rmlui_backend_common_headers)
-
-add_library(rmlui_backend_Win32_DX12 INTERFACE)
-target_sources(rmlui_backend_Win32_DX12 INTERFACE
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_Win32.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_DX12.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Backend_Win32_DX12.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_Win32.h"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_DX12.h"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Include_DirectX_12.h"
-)
-target_link_libraries(rmlui_backend_Win32_DX12 INTERFACE rmlui_backend_common_headers)
 
 add_library(rmlui_backend_X11_GL2 INTERFACE)
 target_sources(rmlui_backend_X11_GL2 INTERFACE
@@ -85,7 +59,7 @@ target_sources(rmlui_backend_SDL_GL2 INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_SDL.h"
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_GL2.h"
 )
-target_link_libraries(rmlui_backend_SDL_GL2 INTERFACE rmlui_backend_common_headers OpenGL::GL SDL::SDL SDL_image::SDL_image)
+target_link_libraries(rmlui_backend_SDL_GL2 INTERFACE rmlui_backend_common_headers OpenGL::GL SDL2::SDL2 GLEW::GLEW SDL2_image::SDL2_image)
 
 add_library(rmlui_backend_SDL_GL3 INTERFACE)
 target_sources(rmlui_backend_SDL_GL3 INTERFACE
@@ -96,15 +70,11 @@ target_sources(rmlui_backend_SDL_GL3 INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_GL3.h"
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Include_GL3.h"
 )
-target_link_libraries(rmlui_backend_SDL_GL3 INTERFACE rmlui_backend_common_headers SDL::SDL SDL_image::SDL_image)
+target_link_libraries(rmlui_backend_SDL_GL3 INTERFACE rmlui_backend_common_headers OpenGL::GL SDL2::SDL2 SDL2_image::SDL2_image)
 if(UNIX)
 	# The OpenGL 3 renderer implementation uses dlopen/dlclose
 	# This is required in some UNIX and UNIX-like operating systems to load shared object files at runtime
 	target_link_libraries(rmlui_backend_SDL_GL3 INTERFACE ${CMAKE_DL_LIBS})
-endif()
-if(EMSCRIPTEN)
-	# Only Emscripten requires linking to OpenGL::GL, for other platforms we use 'glad' as an OpenGL loader.
-	target_link_libraries(rmlui_backend_SDL_GL3 INTERFACE OpenGL::GL)
 endif()
 
 add_library(rmlui_backend_SDL_VK INTERFACE)
@@ -117,23 +87,12 @@ target_sources(rmlui_backend_SDL_VK INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Include_Vulkan.h"
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Vulkan/ShadersCompiledSPV.h"
 )
-target_link_libraries(rmlui_backend_SDL_VK INTERFACE rmlui_backend_common_headers SDL::SDL)
+target_link_libraries(rmlui_backend_SDL_VK INTERFACE rmlui_backend_common_headers SDL2::SDL2)
 if(UNIX)
 	# The Vulkan renderer implementation uses dlopen/dlclose
 	# This is required in some UNIX and UNIX-like operating systems to load shared object files at runtime
 	target_link_libraries(rmlui_backend_SDL_VK INTERFACE ${CMAKE_DL_LIBS})
 endif()
-
-add_library(rmlui_backend_SDL_DX12 INTERFACE)
-target_sources(rmlui_backend_SDL_DX12 INTERFACE
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_SDL.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_DX12.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Backend_SDL_DX12.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_SDL.h"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_DX12.h"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Include_DirectX_12.h"
-)
-target_link_libraries(rmlui_backend_SDL_DX12 INTERFACE rmlui_backend_common_headers SDL::SDL SDL_image::SDL_image)
 
 add_library(rmlui_backend_SDL_SDLrenderer INTERFACE)
 target_sources(rmlui_backend_SDL_SDLrenderer INTERFACE
@@ -143,17 +102,7 @@ target_sources(rmlui_backend_SDL_SDLrenderer INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_SDL.h"
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_SDL.h"
 )
-target_link_libraries(rmlui_backend_SDL_SDLrenderer INTERFACE rmlui_backend_common_headers SDL::SDL SDL_image::SDL_image)
-
-add_library(rmlui_backend_SDL_GPU INTERFACE)
-target_sources(rmlui_backend_SDL_GPU INTERFACE
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_SDL_GPU.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_SDL.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Backend_SDL_GPU.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_SDL.h"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_SDL_GPU.h"
-)
-target_link_libraries(rmlui_backend_SDL_GPU INTERFACE rmlui_backend_common_headers SDL::SDL SDL_image::SDL_image)
+target_link_libraries(rmlui_backend_SDL_SDLrenderer INTERFACE rmlui_backend_common_headers SDL2::SDL2 SDL2_image::SDL2_image)
 
 add_library(rmlui_backend_SFML_GL2 INTERFACE)
 target_sources(rmlui_backend_SFML_GL2 INTERFACE
@@ -186,7 +135,7 @@ target_sources(rmlui_backend_GLFW_GL3 INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_GL3.h"
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Include_GL3.h"
 )
-target_link_libraries(rmlui_backend_GLFW_GL3 INTERFACE rmlui_backend_common_headers glfw)
+target_link_libraries(rmlui_backend_GLFW_GL3 INTERFACE rmlui_backend_common_headers OpenGL::GL glfw)
 if(UNIX)
 	# The OpenGL 3 renderer implementation uses dlopen/dlclose
 	# This is required in some UNIX and UNIX-like operating systems to load shared object files at runtime
@@ -210,17 +159,6 @@ if(UNIX)
 	target_link_libraries(rmlui_backend_GLFW_VK INTERFACE ${CMAKE_DL_LIBS})
 endif()
 
-add_library(rmlui_backend_GLFW_DX12 INTERFACE)
-target_sources(rmlui_backend_GLFW_DX12 INTERFACE
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_GLFW.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_DX12.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Backend_GLFW_DX12.cpp"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_GLFW.h"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Renderer_DX12.h"
-	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Include_DirectX_12.h"
-)
-target_link_libraries(rmlui_backend_GLFW_DX12 INTERFACE rmlui_backend_common_headers glfw)
-
 add_library(rmlui_backend_BackwardCompatible_GLFW_GL2 INTERFACE)
 target_sources(rmlui_backend_BackwardCompatible_GLFW_GL2 INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_Platform_GLFW.cpp"
@@ -239,7 +177,7 @@ target_sources(rmlui_backend_BackwardCompatible_GLFW_GL3 INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_BackwardCompatible/RmlUi_Renderer_BackwardCompatible_GL3.h"
 	"${CMAKE_CURRENT_LIST_DIR}/RmlUi_BackwardCompatible/RmlUi_Backend_BackwardCompatible_GLFW_GL3.cpp"
 )
-target_link_libraries(rmlui_backend_BackwardCompatible_GLFW_GL3 INTERFACE rmlui_backend_common_headers glfw)
+target_link_libraries(rmlui_backend_BackwardCompatible_GLFW_GL3 INTERFACE rmlui_backend_common_headers OpenGL::GL glfw)
 if(UNIX)
 	# The OpenGL 3 renderer implementation uses dlopen/dlclose
 	# This is required in some UNIX and UNIX-like operating systems to load shared object files at runtime

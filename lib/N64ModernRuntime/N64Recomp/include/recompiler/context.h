@@ -44,13 +44,14 @@ namespace N64Recomp {
         uint32_t rom;
         uint32_t lw_vram;
         uint32_t addu_vram;
+        uint32_t addu_gp_vram;
         uint32_t jr_vram;
         uint16_t section_index;
         std::optional<uint32_t> got_offset;
         std::vector<uint32_t> entries;
 
-        JumpTable(uint32_t vram, uint32_t addend_reg, uint32_t rom, uint32_t lw_vram, uint32_t addu_vram, uint32_t jr_vram, uint16_t section_index, std::optional<uint32_t> got_offset, std::vector<uint32_t>&& entries)
-                : vram(vram), addend_reg(addend_reg), rom(rom), lw_vram(lw_vram), addu_vram(addu_vram), jr_vram(jr_vram), section_index(section_index), got_offset(got_offset), entries(std::move(entries)) {}
+        JumpTable(uint32_t vram, uint32_t addend_reg, uint32_t rom, uint32_t lw_vram, uint32_t addu_vram, uint32_t addu_gp_vram, uint32_t jr_vram, uint16_t section_index, std::optional<uint32_t> got_offset, std::vector<uint32_t>&& entries)
+                : vram(vram), addend_reg(addend_reg), rom(rom), lw_vram(lw_vram), addu_vram(addu_vram), addu_gp_vram(addu_gp_vram), jr_vram(jr_vram), section_index(section_index), got_offset(got_offset), entries(std::move(entries)) {}
     };
 
     enum class RelocType : uint8_t {
@@ -129,11 +130,19 @@ namespace N64Recomp {
         std::unordered_map<std::string, size_t> manually_sized_funcs;
         // The section names that were specified as relocatable
         std::unordered_set<std::string> relocatable_sections;
+        // Symbols to ignore.
+        std::unordered_set<std::string> ignored_syms;
+        // Manual mappings of mdebug file records to elf sections.
+        std::unordered_map<std::string, std::string> mdebug_text_map;
+        std::unordered_map<std::string, std::string> mdebug_data_map;
+        std::unordered_map<std::string, std::string> mdebug_rodata_map;
+        std::unordered_map<std::string, std::string> mdebug_bss_map;
         bool has_entrypoint;
         int32_t entrypoint_address;
         bool use_absolute_symbols;
         bool unpaired_lo16_warnings;
         bool all_sections_relocatable;
+        bool use_mdebug;
     };
     
     struct DataSymbol {
@@ -392,7 +401,7 @@ namespace N64Recomp {
             return reference_symbols[symbol_index];
         }
 
-        size_t num_regular_reference_symbols() {
+        size_t num_regular_reference_symbols() const {
             return reference_symbols.size();
         }
 
@@ -564,6 +573,10 @@ namespace N64Recomp {
             }
         }
 
+        size_t num_reference_sections() const {
+            return reference_sections.size();
+        }
+
         void copy_reference_sections_from(const Context& rhs) {
             reference_sections = rhs.reference_sections;
         }
@@ -572,6 +585,9 @@ namespace N64Recomp {
             all_reference_sections_relocatable = true;
         }
 
+        void add_reference_section(const ReferenceSection& sec) {
+            reference_sections.emplace_back(sec);
+        }
     };
 
     class Generator;

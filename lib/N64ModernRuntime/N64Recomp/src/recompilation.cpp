@@ -112,7 +112,7 @@ std::string_view ctx_gpr_prefix(int reg) {
 }
 
 template <typename GeneratorType>
-bool process_instruction(GeneratorType& generator, const N64Recomp::Context& context, const N64Recomp::Function& func, size_t func_index, const N64Recomp::FunctionStats& stats, const std::unordered_set<uint32_t>& jtbl_lw_instructions, size_t instr_index, const std::vector<rabbitizer::InstructionCpu>& instructions, std::ostream& output_file, bool indent, bool emit_link_branch, int link_branch_index, size_t reloc_index, bool& needs_link_branch, bool& is_branch_likely, bool tag_reference_relocs, std::span<std::vector<uint32_t>> static_funcs_out) {
+bool process_instruction(GeneratorType& generator, const N64Recomp::Context& context, const N64Recomp::Function& func, size_t func_index, const N64Recomp::FunctionStats& stats, const std::unordered_set<uint32_t>& jtbl_lw_instructions, const std::unordered_set<uint32_t>& jtbl_addu_gp_instructions, size_t instr_index, const std::vector<rabbitizer::InstructionCpu>& instructions, std::ostream& output_file, bool indent, bool emit_link_branch, int link_branch_index, size_t reloc_index, bool& needs_link_branch, bool& is_branch_likely, bool tag_reference_relocs, std::span<std::vector<uint32_t>> static_funcs_out) {
     using namespace N64Recomp;
 
     const auto& section = context.sections[func.section_index];
@@ -149,6 +149,12 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
     if (jtbl_lw_instructions.contains(instr_vram)) {
         assert(instr_id == InstrId::cpu_lw);
         instr_id = InstrId::cpu_addiu;
+    }
+    // For PIC, the instruction after the jump table load should be an addu with the $gp register. This will interfere
+    // with calculating the jump table value later, so turn it into a nop.
+    if (section.got_ram_addr.has_value() && jtbl_addu_gp_instructions.contains(instr_vram)) {
+        assert(instr_id == InstrId::cpu_addu);
+        instr_id = InstrId::cpu_nop;
     }
 
     N64Recomp::RelocType reloc_type = N64Recomp::RelocType::R_MIPS_NONE;
@@ -215,7 +221,7 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
             if (reloc_index + 1 < section.relocs.size() && next_vram > section.relocs[reloc_index].address) {
                 next_reloc_index++;
             }
-            if (!process_instruction(generator, context, func, func_index, stats, jtbl_lw_instructions, instr_index + 1, instructions, output_file, use_indent, false, link_branch_index, next_reloc_index, dummy_needs_link_branch, dummy_is_branch_likely, tag_reference_relocs, static_funcs_out)) {
+            if (!process_instruction(generator, context, func, func_index, stats, jtbl_lw_instructions, jtbl_addu_gp_instructions, instr_index + 1, instructions, output_file, use_indent, false, link_branch_index, next_reloc_index, dummy_needs_link_branch, dummy_is_branch_likely, tag_reference_relocs, static_funcs_out)) {
                 return false;
             }
         }
@@ -233,6 +239,7 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
         if (!process_delay_slot(false)) {
             return false;
         }
+        generator.emit_function_exit();
         print_indent();
         generator.emit_return(context, func_index);
         print_link_branch();
@@ -297,7 +304,8 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
             }
             else {
                 uint32_t target_section = func.section_index;
-                if (has_reloc) {
+                // If this instruction has a reloc and the target section is a normal section, use the section of the reloc when searching for a matching target function. 
+                if (has_reloc && reloc_section < 65500) {
                     target_section = reloc_section;
                 }
                 JalResolutionResult jal_result = resolve_jal(context, target_section, target_func_vram, matched_func_index);
@@ -365,6 +373,7 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
                 if (!print_func_call_by_address(branch_target, true, true)) {
                     return false;
                 }
+                generator.emit_function_exit();
                 print_indent();
                 generator.emit_return(context, func_index);
                 // TODO check if this branch close should exist.
@@ -514,6 +523,7 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
                 if (!print_func_call_by_address(branch_target, true)) {
                     return false;
                 }
+                generator.emit_function_exit();
                 print_indent();
                 generator.emit_return(context, func_index);
             }
@@ -554,6 +564,7 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
 
             fmt::print("[Info] Indirect tail call in {}\n", func.name);
             print_func_call_by_register(rs);
+            generator.emit_function_exit();
             print_indent();
             generator.emit_return(context, func_index);
             break;
@@ -562,6 +573,7 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
     case InstrId::cpu_syscall:
         print_indent();
         generator.emit_syscall(instr_vram);
+        generator.emit_function_exit();
         // syscalls don't link, so treat it like a tail call
         print_indent();
         generator.emit_return(context, func_index);
@@ -765,6 +777,7 @@ bool recompile_function_impl(GeneratorType& generator, const N64Recomp::Context&
     std::vector<rabbitizer::InstructionCpu> instructions;
 
     generator.emit_function_start(func.name, func_index);
+    generator.emit_function_entry(func.name, func.vram);
 
     if (context.trace_mode) {
         fmt::print(output_file,
@@ -806,6 +819,7 @@ bool recompile_function_impl(GeneratorType& generator, const N64Recomp::Context&
         }
 
         std::unordered_set<uint32_t> jtbl_lw_instructions{};
+        std::unordered_set<uint32_t> jtbl_addu_gp_instructions{};
 
         // Add jump table labels into function
         for (const auto& jtbl : stats.jump_tables) {
@@ -813,6 +827,11 @@ bool recompile_function_impl(GeneratorType& generator, const N64Recomp::Context&
             for (uint32_t jtbl_entry : jtbl.entries) {
                 branch_labels.insert(jtbl_entry);
             }
+        }
+
+        // Collect jump table addu reg, reg, $gp instructions for PIC 
+        for (const auto& jtbl : stats.jump_tables) {
+            jtbl_addu_gp_instructions.insert(jtbl.addu_gp_vram);
         }
 
         // Second pass, emit code for each instruction and emit labels
@@ -843,7 +862,7 @@ bool recompile_function_impl(GeneratorType& generator, const N64Recomp::Context&
             }
 
             // Process the current instruction and check for errors
-            if (process_instruction(generator, context, func, func_index, stats, jtbl_lw_instructions, instr_index, instructions, output_file, false, needs_link_branch, num_link_branches, reloc_index, needs_link_branch, is_branch_likely, tag_reference_relocs, static_funcs_out) == false) {
+            if (process_instruction(generator, context, func, func_index, stats, jtbl_lw_instructions, jtbl_addu_gp_instructions, instr_index, instructions, output_file, false, needs_link_branch, num_link_branches, reloc_index, needs_link_branch, is_branch_likely, tag_reference_relocs, static_funcs_out) == false) {
                 fmt::print(stderr, "Error in recompiling {}, clearing output file\n", func.name);
                 output_file.clear();
                 return false;
@@ -866,6 +885,7 @@ bool recompile_function_impl(GeneratorType& generator, const N64Recomp::Context&
     }
 
     // Terminate the function
+    generator.emit_function_exit();
     generator.emit_function_end();
     
     return true;

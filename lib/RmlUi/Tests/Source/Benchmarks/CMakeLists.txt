@@ -1,7 +1,6 @@
 set(TARGET_NAME "rmlui_benchmarks")
 
 add_executable(${TARGET_NAME}
-	CustomProperties.cpp
 	DataExpression.cpp
 	Element.cpp
 	BackgroundBorder.cpp

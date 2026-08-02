@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include <RmlUi/Core/Math.h>
 #include <RmlUi/Core/Types.h>
 #include <doctest.h>
@@ -125,32 +153,4 @@ TEST_CASE("Math.Max")
 	CHECK(Math::Max<Vector2f>({1, 1}, {2, 2}) == Vector2f(2, 2));
 	CHECK(Math::Max<Vector2f>({2, 2}, {1, 1}) == Vector2f(2, 2));
 	CHECK(Math::Max<Vector2f>({2, 1}, {1, 2}) == Vector2f(2, 2));
-}
-
-TEST_CASE("Math.Round")
-{
-	CHECK(Math::Round(-1.0f) == -1.f);
-	CHECK(Math::Round(0.0f) == 0.f);
-	CHECK(Math::Round(1.0f) == 1.f);
-
-	CHECK(Math::Round(0.49f) == 0.f);
-	CHECK(Math::Round(0.50f) == 1.f);
-	CHECK(Math::Round(0.51f) == 1.f);
-	CHECK(Math::Round(-0.49f) == 0.f);
-	CHECK(Math::Round(-0.50f) == 0.f); // Always round half up, see commit message.
-	CHECK(Math::Round(-0.51f) == -1.f);
-
-	CHECK(Math::Round(1000.49f) == 1000.f);
-	CHECK(Math::Round(1000.50f) == 1001.f);
-	CHECK(Math::Round(1000.51f) == 1001.f);
-	CHECK(Math::Round(-1000.49f) == -1000.f);
-	CHECK(Math::Round(-1000.50f) == -1000.f);
-	CHECK(Math::Round(-1000.51f) == -1001.f);
-
-	CHECK(Math::Round(100000.49f) == 100000.f);
-	CHECK(Math::Round(100000.50f) == 100001.f);
-	CHECK(Math::Round(100000.51f) == 100001.f);
-	CHECK(Math::Round(-100000.49f) == -100000.f);
-	CHECK(Math::Round(-100000.50f) == -100000.f);
-	CHECK(Math::Round(-100000.51f) == -100001.f);
 }

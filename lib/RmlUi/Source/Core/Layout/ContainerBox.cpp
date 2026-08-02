@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "ContainerBox.h"
 #include "../../../Include/RmlUi/Core/ComputedValues.h"
 #include "../../../Include/RmlUi/Core/Element.h"
@@ -36,11 +64,6 @@ void ContainerBox::AddRelativeElement(Element* element)
 	// The same relative element may be added multiple times during repeated layout iterations, avoid any duplicates.
 	if (std::find(relative_elements.begin(), relative_elements.end(), element) == relative_elements.end())
 		relative_elements.push_back(element);
-}
-
-bool ContainerBox::IsScrollContainer() const
-{
-	return LayoutDetails::IsScrollContainer(overflow_x, overflow_y);
 }
 
 void ContainerBox::ClosePositionedElements()
@@ -114,25 +137,13 @@ ContainerBox::ContainerBox(Type type, Element* element, ContainerBox* parent_con
 	}
 }
 
-Vector2f ContainerBox::GetScrollableOverflowContentSize(Vector2f visible_overflow_size, Vector2f scrollable_content_size,
-	Vector2f padding_bottom_right) const
-{
-	// The scrollable overflow content size is the largest of:
-	//     1. Visible overflow: Descendant boxes whose border box overflow outside the padding area of this box.
-	//     2. Scrollable content: Margin boxes of our direct descendant overflowing onto the padding box of this box.
-	return Math::Max(visible_overflow_size, scrollable_content_size + padding_bottom_right);
-}
-
-bool ContainerBox::CatchOverflow(const Vector2f visible_overflow_size, const Vector2f scrollable_content_size, const Box& box,
-	const float max_height) const
+bool ContainerBox::CatchOverflow(const Vector2f content_overflow_size, const Box& box, const float max_height) const
 {
 	if (!IsScrollContainer())
 		return true;
 
 	const Vector2f padding_bottom_right = {box.GetEdge(BoxArea::Padding, BoxEdge::Right), box.GetEdge(BoxArea::Padding, BoxEdge::Bottom)};
 	const float padding_width = box.GetSizeAcross(BoxDirection::Horizontal, BoxArea::Padding);
-
-	const Vector2f overflow_content_size = GetScrollableOverflowContentSize(visible_overflow_size, scrollable_content_size, padding_bottom_right);
 
 	Vector2f available_space = box.GetSize();
 	if (available_space.y < 0.f)
@@ -150,7 +161,7 @@ bool ContainerBox::CatchOverflow(const Vector2f visible_overflow_size, const Vec
 
 	// @performance If we have auto-height sizing and the horizontal scrollbar is enabled, then we can in principle
 	// simply add the scrollbar size to the height instead of formatting the element all over again.
-	if (overflow_x == Style::Overflow::Auto && overflow_content_size.x > available_space.x + 0.5f)
+	if (overflow_x == Style::Overflow::Auto && content_overflow_size.x > available_space.x + 0.5f)
 	{
 		if (element_scroll->GetScrollbarSize(ElementScroll::HORIZONTAL) == 0.f)
 		{
@@ -162,7 +173,7 @@ bool ContainerBox::CatchOverflow(const Vector2f visible_overflow_size, const Vec
 	}
 
 	// If we're auto-scrolling and our height is fixed, we have to check if this box has exceeded our client height.
-	if (overflow_y == Style::Overflow::Auto && overflow_content_size.y > available_space.y + 0.5f)
+	if (overflow_y == Style::Overflow::Auto && content_overflow_size.y > available_space.y + 0.5f)
 	{
 		if (element_scroll->GetScrollbarSize(ElementScroll::VERTICAL) == 0.f)
 		{
@@ -175,9 +186,9 @@ bool ContainerBox::CatchOverflow(const Vector2f visible_overflow_size, const Vec
 	return !scrollbar_size_changed;
 }
 
-bool ContainerBox::SubmitBox(const Vector2f visible_overflow_size, const Vector2f scrollable_content_size, const Box& box, const float max_height)
+bool ContainerBox::SubmitBox(const Vector2f content_overflow_size, const Box& box, const float max_height)
 {
-	Vector2f propagate_visible_overflow_size;
+	Vector2f visible_overflow_size;
 
 	// Set the computed box on the element.
 	if (element)
@@ -192,7 +203,7 @@ bool ContainerBox::SubmitBox(const Vector2f visible_overflow_size, const Vector2
 
 		// If our content is larger than our padding box, we can add scrollbars if we're set to auto-scrollbars. If
 		// we're set to always use scrollbars, then the scrollbars have already been enabled.
-		if (!CatchOverflow(visible_overflow_size, scrollable_content_size, box, max_height))
+		if (!CatchOverflow(content_overflow_size, box, max_height))
 			return false;
 
 		const Vector2f padding_top_left = {box.GetEdge(BoxArea::Padding, BoxEdge::Left), box.GetEdge(BoxArea::Padding, BoxEdge::Top)};
@@ -208,9 +219,7 @@ bool ContainerBox::SubmitBox(const Vector2f visible_overflow_size, const Vector2
 		element->SetBox(box);
 
 		// Scrollable overflow is the set of things extending our padding area, for which scrolling could be provided.
-		const Vector2f scrollable_overflow_size = Math::Max(padding_size - scrollbar_size,
-			padding_top_left + GetScrollableOverflowContentSize(visible_overflow_size, scrollable_content_size, padding_bottom_right));
-
+		const Vector2f scrollable_overflow_size = Math::Max(padding_size - scrollbar_size, padding_top_left + content_overflow_size);
 		// Set the overflow size but defer clamping of the scroll offset, see `LayoutEngine::FormatElement`.
 		element->SetScrollableOverflowRectangle(scrollable_overflow_size, false);
 
@@ -218,10 +227,10 @@ bool ContainerBox::SubmitBox(const Vector2f visible_overflow_size, const Vector2
 
 		// Set the visible overflow size so that ancestors can catch any overflow produced by us. That is, hiding it or
 		// providing a scrolling mechanism. If this box is a scroll container we catch our own overflow here. Thus, in
-		// this case, only our border box is visible from our ancestor's perspective.
+		// this case, only our border box is visible from our ancestor's perpective.
 		if (is_scroll_container)
 		{
-			propagate_visible_overflow_size = border_size;
+			visible_overflow_size = border_size;
 
 			// Format any scrollbars in case they were enabled on this element.
 			element->GetElementScroll()->FormatScrollbars();
@@ -229,11 +238,11 @@ bool ContainerBox::SubmitBox(const Vector2f visible_overflow_size, const Vector2
 		else
 		{
 			const Vector2f border_top_left = {box.GetEdge(BoxArea::Border, BoxEdge::Left), box.GetEdge(BoxArea::Border, BoxEdge::Top)};
-			propagate_visible_overflow_size = Math::Max(border_size, visible_overflow_size + border_top_left + padding_top_left);
+			visible_overflow_size = Math::Max(border_size, content_overflow_size + border_top_left + padding_top_left);
 		}
 	}
 
-	SetVisibleOverflowSize(propagate_visible_overflow_size);
+	SetVisibleOverflowSize(visible_overflow_size);
 
 	return true;
 }
@@ -248,9 +257,9 @@ FlexContainer::FlexContainer(Element* element, ContainerBox* parent_container) :
 	RMLUI_ASSERT(element);
 }
 
-bool FlexContainer::Close(const Vector2f visible_overflow_size, const Vector2f scrollable_content_size, const Box& box, float element_baseline)
+bool FlexContainer::Close(const Vector2f content_overflow_size, const Box& box, float element_baseline)
 {
-	if (!SubmitBox(visible_overflow_size, scrollable_content_size, box, -1.f))
+	if (!SubmitBox(content_overflow_size, box, -1.f))
 		return false;
 
 	ClosePositionedElements();
@@ -280,9 +289,9 @@ TableWrapper::TableWrapper(Element* element, ContainerBox* parent_container) : C
 	RMLUI_ASSERT(element);
 }
 
-void TableWrapper::Close(const Vector2f visible_overflow_size, const Box& box, float element_baseline)
+void TableWrapper::Close(const Vector2f content_overflow_size, const Box& box, float element_baseline)
 {
-	bool result = SubmitBox(visible_overflow_size, Vector2f(0.f), box, -1.f);
+	bool result = SubmitBox(content_overflow_size, box, -1.f);
 
 	// Since the table wrapper cannot generate scrollbars, this should always pass.
 	RMLUI_ASSERT(result);

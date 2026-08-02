@@ -6,6 +6,8 @@
 #include "recompiler/context.h"
 #include "elfio/elfio.hpp"
 
+#include "mdebug.h"
+
 bool read_symbols(N64Recomp::Context& context, const ELFIO::elfio& elf_file, ELFIO::section* symtab_section, const N64Recomp::ElfParsingConfig& elf_config, bool dumping_context, std::unordered_map<uint16_t, std::vector<N64Recomp::DataSymbol>>& data_syms) {
     bool found_entrypoint_func = false;
     ELFIO::symbol_section_accessor symbols{ elf_file, symtab_section };
@@ -126,9 +128,9 @@ bool read_symbols(N64Recomp::Context& context, const ELFIO::elfio& elf_file, ELF
                     if (bind == ELFIO::STB_LOCAL) {
                         name = fmt::format("{}_{:08X}", name, rom_address);
                     }
-                    
+
                     if (num_instructions > 0) {
-                        context.section_functions[section_index].push_back(context.functions.size());            
+                        context.section_functions[section_index].push_back(context.functions.size());
                         recorded_symbol = true;
                     }
                     context.functions_by_name[name] = context.functions.size();
@@ -178,10 +180,13 @@ bool read_symbols(N64Recomp::Context& context, const ELFIO::elfio& elf_file, ELF
                     fmt::print("Symbol \"{}\" not in a valid section ({})\n", name, section_index);
                 }
 
-                // Move this symbol into the corresponding non-bss section if it's in a bss section.
+                // Move this symbol into the corresponding non-bss section if it's in a bss section and the paired section is relocatable.
                 auto find_bss_it = bss_section_to_target_section.find(target_section_index);
                 if (find_bss_it != bss_section_to_target_section.end()) {
-                    target_section_index = find_bss_it->second;
+                    uint16_t new_target_section_index = find_bss_it->second;
+                    if (new_target_section_index < context.sections.size() && context.sections[new_target_section_index].relocatable) {
+                        target_section_index = find_bss_it->second;
+                    }
                 }
 
                 data_syms[target_section_index].emplace_back(
@@ -215,7 +220,7 @@ std::optional<size_t> get_segment(const std::vector<SegmentEntry>& segments, ELF
     return std::nullopt;
 }
 
-ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfParsingConfig& elf_config, const ELFIO::elfio& elf_file) {
+ELFIO::section* read_sections(N64Recomp::Context& context, ELFIO::section*& mdebug_section_out, const N64Recomp::ElfParsingConfig& elf_config, const ELFIO::elfio& elf_file) {
     ELFIO::section* symtab_section = nullptr;
     std::vector<SegmentEntry> segments{};
     segments.resize(elf_file.segments.size());
@@ -247,7 +252,7 @@ ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfP
         ELFIO::Elf_Xword flags = section->get_flags();
         ELFIO::Elf_Xword section_size = section->get_size();
 
-        // Check if this section will end up in the ROM. It must not be a nobits (NOLOAD) type, must have the alloc flag set and must have a nonzero size. 
+        // Check if this section will end up in the ROM. It must not be a nobits (NOLOAD) type, must have the alloc flag set and must have a nonzero size.
         if (type != ELFIO::SHT_NOBITS && (flags & ELFIO::SHF_ALLOC) && section_size != 0) {
             std::optional<size_t> segment_index = get_segment(segments, section_size, section->get_offset());
             if (!segment_index.has_value()) {
@@ -283,10 +288,15 @@ ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfP
             symtab_section = section.get();
         }
 
+        // Check if this section is an mdebug section and record it if so. Note we expect just one mdebug section
+        if (type == 0x70000005/* SHT_MIPS_DEBUG */) {
+            mdebug_section_out = section.get();
+        }
+
         if (elf_config.all_sections_relocatable || elf_config.relocatable_sections.contains(section_name)) {
             section_out.relocatable = true;
         }
-        
+
         // Check if this section is a reloc section
         if (type == ELFIO::SHT_REL) {
             // If it is, determine the name of the section it relocates
@@ -294,7 +304,7 @@ ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfP
                 fmt::print(stderr, "Could not determine corresponding section for reloc section {}\n", section_name.c_str());
                 return nullptr;
             }
-            
+
             // FIXME This should be using SH_INFO to create a reloc section to target section mapping instead of using the name.
             std::string reloc_target_section = section_name.substr(strlen(".rel"));
 
@@ -310,8 +320,7 @@ ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfP
         if (type == ELFIO::SHT_NOBITS && section_name.ends_with(elf_config.bss_section_suffix)) {
             std::string bss_target_section = section_name.substr(0, section_name.size() - elf_config.bss_section_suffix.size());
 
-            // If this bss section is for a section that has been marked as relocatable, record it in the reloc section lookup
-            if (elf_config.all_sections_relocatable || elf_config.relocatable_sections.contains(bss_target_section)) {
+            if (!bss_target_section.empty()) {
                 bss_sections_by_name[bss_target_section] = section.get();
             }
         }
@@ -416,6 +425,13 @@ ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfP
 
                     // Check if the symbol is undefined and to know whether to look for it in the reference symbols.
                     if (rel_symbol_section_index == ELFIO::SHN_UNDEF) {
+                        // Get renamed version of symbol name if necessary
+                        if (N64Recomp::reimplemented_funcs.contains(rel_symbol_name) ||
+                            N64Recomp::ignored_funcs.contains(rel_symbol_name) ||
+                            N64Recomp::renamed_funcs.contains(rel_symbol_name)) {
+                            rel_symbol_name = rel_symbol_name + "_recomp";
+                        }
+
                         // Undefined sym, check the reference symbols.
                         N64Recomp::SymbolReference sym_ref;
                         if (!context.find_reference_symbol(rel_symbol_name, sym_ref)) {
@@ -423,7 +439,7 @@ ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfP
                                 rel_symbol_name);
                             return nullptr;
                         }
-                        
+
                         reloc_out.reference_symbol = true;
                         // Replace the reloc's symbol index with the index into the reference symbol array.
                         rel_section_vram = 0;
@@ -566,7 +582,7 @@ ELFIO::section* read_sections(N64Recomp::Context& context, const N64Recomp::ElfP
             // Sort this section's relocs by address, which allows for binary searching and more efficient iteration during recompilation.
             // This is safe to do as the entire full_immediate in present in relocs due to the pairing that was done earlier, so the HI16 does not
             // need to directly preceed the matching LO16 anymore.
-            std::sort(section_out.relocs.begin(), section_out.relocs.end(), 
+            std::sort(section_out.relocs.begin(), section_out.relocs.end(),
                 [](const N64Recomp::Reloc& a, const N64Recomp::Reloc& b) {
                     return a.address < b.address;
                 }
@@ -630,14 +646,15 @@ bool N64Recomp::Context::from_elf_file(const std::filesystem::path& elf_file_pat
     }
 
     if (elf_file.get_encoding() != ELFIO::ELFDATA2MSB) {
-        fmt::print("Incorrect endianness\n");
+        fmt::print("Incorrect elf endianness\n");
         return false;
     }
 
     setup_context_for_elf(out, elf_file);
 
     // Read all of the sections in the elf and look for the symbol table section
-    ELFIO::section* symtab_section = read_sections(out, elf_config, elf_file);
+    ELFIO::section* mdebug_section = nullptr;
+    ELFIO::section* symtab_section = read_sections(out, mdebug_section, elf_config, elf_file);
 
     // If no symbol table was found then exit
     if (symtab_section == nullptr) {
@@ -646,6 +663,18 @@ bool N64Recomp::Context::from_elf_file(const std::filesystem::path& elf_file_pat
 
     // Read all of the symbols in the elf and look for the entrypoint function
     found_entrypoint_out = read_symbols(out, elf_file, symtab_section, elf_config, for_dumping_context, data_syms_out);
+
+    // Process an mdebug section for static symbols. The presence of an mdebug section in the input is optional.
+    if (elf_config.use_mdebug) {
+        if (mdebug_section == nullptr) {
+            fmt::print("\"use_mdebug\" set to true in config, but no mdebug section is present in the elf!\n");
+            return false;
+        }
+        if (!N64Recomp::MDebug::parse_mdebug(elf_config, mdebug_section->get_data(), static_cast<uint32_t>(mdebug_section->get_offset()), out, data_syms_out)) {
+            fmt::print("Failed to parse mdebug section\n");
+            return false;
+        }
+    }
 
     return true;
 }

@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../Common/TestsShell.h"
 #include <RmlUi/Core/ComputedValues.h>
 #include <RmlUi/Core/Context.h>
@@ -30,7 +58,7 @@ static const String document_escaping = R"(
 <rml>
     <head>
 	<style>
-	p {
+	p { 
 		font-family: LatoLatin;
 	}
 	</style>
@@ -45,7 +73,7 @@ static const String document_escaping_tags = R"(
 <rml>
     <head>
 	<style>
-	* {
+	* { 
 		font-family: LatoLatin;
 	}
 	</style>
@@ -115,82 +143,5 @@ TEST_CASE("XMLParser.escaping_tags")
 	CHECK(document->GetInnerRML() == "&lt;p&gt;&amp;lt;span/&amp;gt;&lt;/p&gt;");
 
 	document->Close();
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("XMLParser.comments_and_cdata")
-{
-	const String document_source_pre = R"(
-	<rml>
-	    <head>
-		<style>
-		body {
-			font-family: LatoLatin;
-		}
-		</style>
-	    </head>
-	    <body>)";
-	const String document_source_post = R"(</body></rml>)";
-
-	struct TestCase {
-		String rml;
-		String expected_parsed_rml;
-	};
-
-	const TestCase tests[] = {
-		{"<!-- <xyz> -->", ""},
-		{"<!--<xyz>-->", ""},
-		{"<!-- <xyz> ->-->", ""},
-		{"<!-- <xyz> -- >-->", ""},
-		{"<!-- <xyz> --->", ""},
-		{"<!-- <xyz> ---->", ""},
-		{"<!--- <xyz> ---->", ""},
-		{"<!-- <p> --><p>hello</p><!-- </p> -->", "<p>hello</p>"},
-		{"<![CDATA[hello]]>", "hello"},
-		{"<![CDATA[hello]]]>", "hello]"},
-		{"<![CDATA[hello]]world]]>", "hello]]world"},
-		{"<![CDATA[\"hello\"]]>", "&quot;hello&quot;"},
-		{"<![CDATA[<p>world</p>]]>", "<p>world</p>"},
-	};
-
-	Context* context = TestsShell::GetContext();
-	REQUIRE(context);
-
-	for (const TestCase& test : tests)
-	{
-		ElementDocument* document = context->LoadDocumentFromMemory(document_source_pre + test.rml + document_source_post);
-		REQUIRE(document);
-
-		CHECK(document->GetInnerRML() == test.expected_parsed_rml);
-
-		document->Close();
-		context->Update();
-	}
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("XMLParser.invalid.extra_closing")
-{
-	const String document_source = R"(_icon class="exit"><disc_icon_inner /></disc_icon></disc_slice>
-				<type id="disc_title" />
-				<type id="disc_desc" />
-			</main_inner>
-		</menu_container>
-    </body>
-</rml>)";
-
-	Context* context = TestsShell::GetContext();
-	REQUIRE(context);
-
-	TestsShell::SetNumExpectedWarnings(3);
-
-	ElementDocument* document = context->LoadDocumentFromMemory(document_source);
-	REQUIRE(document);
-
-	CHECK(document->GetInnerRML() == R"(_icon class=&quot;exit&quot;&gt;)");
-
-	document->Close();
-	context->Update();
-
 	TestsShell::ShutdownShell();
 }

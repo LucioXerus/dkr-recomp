@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "GeometryBoxShadow.h"
 #include "../../Include/RmlUi/Core/Box.h"
 #include "../../Include/RmlUi/Core/CompiledFilterShader.h"
@@ -6,24 +34,16 @@
 #include "../../Include/RmlUi/Core/Geometry.h"
 #include "../../Include/RmlUi/Core/Math.h"
 #include "../../Include/RmlUi/Core/MeshUtilities.h"
-#include "../../Include/RmlUi/Core/Profiling.h"
 #include "../../Include/RmlUi/Core/RenderManager.h"
-#include "ElementStyle.h"
 
 namespace Rml {
 
-BoxShadowGeometryInfo GeometryBoxShadow::Resolve(Element* element, const CornerSizes& border_radius, ColourbPremultiplied background_color,
-	const Array<ColourbPremultiplied, 4>& border_colors, float opacity)
+void GeometryBoxShadow::Generate(Geometry& out_shadow_geometry, CallbackTexture& out_shadow_texture, RenderManager& render_manager, Element* element,
+	Geometry& background_border_geometry, BoxShadowList shadow_list, const Vector4f border_radius, const float opacity)
 {
-	RMLUI_ZoneScoped;
-
 	// Find the box-shadow texture dimension and offset required to cover all box-shadows and element boxes combined.
 	Vector2f element_offset_in_texture;
 	Vector2i texture_dimensions;
-
-	const Property* p_box_shadow = element->GetStyle()->GetLocalPropertyWithResolvedVariables(PropertyId::BoxShadow);
-	RMLUI_ASSERT(p_box_shadow->value.GetType() == Variant::BOXSHADOWLIST);
-	BoxShadowList shadow_list = p_box_shadow->value.Get<BoxShadowList>();
 
 	// Resolve all lengths to px units.
 	for (BoxShadow& shadow : shadow_list)
@@ -55,8 +75,9 @@ BoxShadowGeometryInfo GeometryBoxShadow::Resolve(Element* element, const CornerS
 		// Extend the render-texture further to cover all the element's boxes.
 		for (int i = 0; i < element->GetNumBoxes(); i++)
 		{
-			const RenderBox box = element->GetRenderBox(BoxArea::Border, i);
-			texture_region = texture_region.Join(Rectanglef::FromPositionSize(box.GetBorderOffset(), box.GetFillSize()));
+			Vector2f offset;
+			const Box& box = element->GetBox(i, offset);
+			texture_region = texture_region.Join(Rectanglef::FromPositionSize(offset, box.GetSize(BoxArea::Border)));
 		}
 
 		texture_region = texture_region.Extend(-extend_min, extend_max);
@@ -66,48 +87,10 @@ BoxShadowGeometryInfo GeometryBoxShadow::Resolve(Element* element, const CornerS
 		texture_dimensions = Vector2i(texture_region.Size());
 	}
 
-	// Since we can reuse textures across multiple box shadows with the same properties,
-	// we need to copy the element's box shadow list and the background and border geometry.
-	RenderBoxList padding_render_boxes{};
-	RenderBoxList border_render_boxes{};
-
-	for (int i = 0; i < element->GetNumBoxes(); i++)
-	{
-		padding_render_boxes.push_back(element->GetRenderBox(BoxArea::Padding, i));
-		border_render_boxes.push_back(element->GetRenderBox(BoxArea::Border, i));
-	}
-
-	// Finally, create cache information
-	BoxShadowGeometryInfo geometry_info;
-	geometry_info.background_color = background_color;
-	geometry_info.border_colors = border_colors;
-	geometry_info.border_radius = border_radius;
-	geometry_info.texture_dimensions = texture_dimensions;
-	geometry_info.element_offset_in_texture = element_offset_in_texture;
-	geometry_info.padding_render_boxes = std::move(padding_render_boxes);
-	geometry_info.border_render_boxes = std::move(border_render_boxes);
-	geometry_info.shadow_list = std::move(shadow_list);
-	geometry_info.opacity = opacity;
-	return geometry_info;
-}
-
-void GeometryBoxShadow::GenerateTexture(CallbackTexture& out_shadow_texture, Geometry& out_background_border_geometry, RenderManager& render_manager,
-	const BoxShadowGeometryInfo& info)
-{
-	RMLUI_ZoneScoped;
-
-	Mesh mesh = out_background_border_geometry.Release(Geometry::ReleaseMode::ClearMesh);
-	for (size_t i = 0; i < info.padding_render_boxes.size(); i++)
-		MeshUtilities::GenerateBackgroundBorder(mesh, info.padding_render_boxes[i], info.background_color, info.border_colors.data());
-	out_background_border_geometry = render_manager.MakeGeometry(std::move(mesh));
-
 	// Callback for generating the box-shadow texture. Using a callback ensures that the texture can be regenerated at any time, for example if the
 	// device loses its GPU context and the client calls Rml::ReleaseTextures().
-	auto texture_callback = [&info, &out_background_border_geometry](const CallbackTextureInterface& texture_interface) -> bool {
-		RMLUI_ASSERT(info.border_render_boxes.size() == info.padding_render_boxes.size());
-		RMLUI_ZoneScopedN("BoxShadow::GenerateTexture::Callback");
-		size_t num_boxes = info.border_render_boxes.size();
-
+	auto texture_callback = [&background_border_geometry, element, border_radius, texture_dimensions, element_offset_in_texture,
+								shadow_list = std::move(shadow_list)](const CallbackTextureInterface& texture_interface) -> bool {
 		RenderManager& render_manager = texture_interface.GetRenderManager();
 
 		Mesh mesh_padding;        // Render geometry for inner box-shadow.
@@ -115,7 +98,7 @@ void GeometryBoxShadow::GenerateTexture(CallbackTexture& out_shadow_texture, Geo
 
 		bool has_inner_shadow = false;
 		bool has_outer_shadow = false;
-		for (const BoxShadow& shadow : info.shadow_list)
+		for (const BoxShadow& shadow : shadow_list)
 		{
 			if (shadow.inset)
 				has_inner_shadow = true;
@@ -124,18 +107,21 @@ void GeometryBoxShadow::GenerateTexture(CallbackTexture& out_shadow_texture, Geo
 		}
 
 		// Generate the geometry for all the element's boxes and extend the render-texture further to cover all of them.
-		for (size_t i = 0; i < num_boxes; i++)
+		for (int i = 0; i < element->GetNumBoxes(); i++)
 		{
+			Vector2f offset;
+			const Box& box = element->GetBox(i, offset);
 			ColourbPremultiplied white(255);
+
 			if (has_inner_shadow)
-				MeshUtilities::GenerateBackground(mesh_padding, info.padding_render_boxes[i], white);
+				MeshUtilities::GenerateBackground(mesh_padding, box, offset, border_radius, white, BoxArea::Padding);
 			if (has_outer_shadow)
-				MeshUtilities::GenerateBackground(mesh_padding_border, info.border_render_boxes[i], white);
+				MeshUtilities::GenerateBackground(mesh_padding_border, box, offset, border_radius, white, BoxArea::Border);
 		}
 
 		const RenderState initial_render_state = render_manager.GetState();
 		render_manager.ResetState();
-		render_manager.SetScissorRegion(Rectanglei::FromSize(info.texture_dimensions));
+		render_manager.SetScissorRegion(Rectanglei::FromSize(texture_dimensions));
 
 		// The scissor region will be clamped to the current window size, check the resulting scissor region.
 		const Rectanglei scissor_region = render_manager.GetScissorRegion();
@@ -146,26 +132,27 @@ void GeometryBoxShadow::GenerateTexture(CallbackTexture& out_shadow_texture, Geo
 			render_manager.SetState(initial_render_state);
 			return false;
 		}
-		if (scissor_region != Rectanglei::FromSize(info.texture_dimensions))
+		if (scissor_region != Rectanglei::FromSize(texture_dimensions))
 		{
 			Log::Message(Log::LT_INFO,
 				"The desired box-shadow texture dimensions (%d, %d) are larger than the current window region (%d, %d). "
-				"Results may be clipped.",
-				info.texture_dimensions.x, info.texture_dimensions.y, scissor_region.Width(), scissor_region.Height());
+				"Results may be clipped. In element: %s",
+				texture_dimensions.x, texture_dimensions.y, scissor_region.Width(), scissor_region.Height(), element->GetAddress().c_str());
 		}
 
 		render_manager.PushLayer();
-		out_background_border_geometry.Render(info.element_offset_in_texture);
 
-		for (int shadow_index = (int)info.shadow_list.size() - 1; shadow_index >= 0; shadow_index--)
+		background_border_geometry.Render(element_offset_in_texture);
+
+		for (int shadow_index = (int)shadow_list.size() - 1; shadow_index >= 0; shadow_index--)
 		{
-			const BoxShadow& shadow = info.shadow_list[shadow_index];
+			const BoxShadow& shadow = shadow_list[shadow_index];
 			const Vector2f shadow_offset = {shadow.offset_x.number, shadow.offset_y.number};
 			const bool inset = shadow.inset;
 			const float spread_distance = shadow.spread_distance.number;
 			const float blur_radius = shadow.blur_radius.number;
 
-			CornerSizes spread_radii = info.border_radius;
+			Vector4f spread_radii = border_radius;
 			for (int i = 0; i < 4; i++)
 			{
 				float& radius = spread_radii[i];
@@ -180,15 +167,22 @@ void GeometryBoxShadow::GenerateTexture(CallbackTexture& out_shadow_texture, Geo
 
 			Mesh mesh_shadow;
 
-			// Generate the shadow geometry. For outer box-shadows it is rendered normally, while for inset box-shadows it is used as a clipping mask.
-			for (size_t i = 0; i < num_boxes; i++)
+			// Generate the shadow geometry. For outer box-shadows it is rendered normally, while for inner box-shadows it is used as a clipping mask.
+			for (int i = 0; i < element->GetNumBoxes(); i++)
 			{
+				Vector2f offset;
+				Box box = element->GetBox(i, offset);
 				const float signed_spread_distance = (inset ? -spread_distance : spread_distance);
-				RenderBox render_box = (inset ? info.padding_render_boxes : info.border_render_boxes)[i];
-				render_box.SetFillSize(Math::Max(render_box.GetFillSize() + Vector2f(2.f * signed_spread_distance), Vector2f{0.001f}));
-				render_box.SetBorderRadius(spread_radii);
-				render_box.SetBorderOffset(render_box.GetBorderOffset() - Vector2f(signed_spread_distance));
-				MeshUtilities::GenerateBackground(mesh_shadow, render_box, shadow.color);
+				offset -= Vector2f(signed_spread_distance);
+
+				for (int j = 0; j < Box::num_edges; j++)
+				{
+					BoxEdge edge = (BoxEdge)j;
+					const float new_size = box.GetEdge(BoxArea::Padding, edge) + signed_spread_distance;
+					box.SetEdge(BoxArea::Padding, edge, new_size);
+				}
+
+				MeshUtilities::GenerateBackground(mesh_shadow, box, offset, spread_radii, shadow.color, inset ? BoxArea::Padding : BoxArea::Border);
 			}
 
 			CompiledFilter blur;
@@ -203,23 +197,23 @@ void GeometryBoxShadow::GenerateTexture(CallbackTexture& out_shadow_texture, Geo
 
 			if (inset)
 			{
-				render_manager.SetClipMask(ClipMaskOperation::SetInverse, &geometry_shadow, shadow_offset + info.element_offset_in_texture);
+				render_manager.SetClipMask(ClipMaskOperation::SetInverse, &geometry_shadow, shadow_offset + element_offset_in_texture);
 
 				for (Rml::Vertex& vertex : mesh_padding.vertices)
 					vertex.colour = shadow.color;
 
 				// @performance: Don't need to copy the mesh if this is the last use of it.
 				Geometry geometry_padding = render_manager.MakeGeometry(Mesh(mesh_padding));
-				geometry_padding.Render(info.element_offset_in_texture);
+				geometry_padding.Render(element_offset_in_texture);
 
-				render_manager.SetClipMask(ClipMaskOperation::Set, &geometry_padding, info.element_offset_in_texture);
+				render_manager.SetClipMask(ClipMaskOperation::Set, &geometry_padding, element_offset_in_texture);
 			}
 			else
 			{
 				Mesh mesh = mesh_padding_border;
 				Geometry geometry_padding_border = render_manager.MakeGeometry(std::move(mesh));
-				render_manager.SetClipMask(ClipMaskOperation::SetInverse, &geometry_padding_border, info.element_offset_in_texture);
-				geometry_shadow.Render(shadow_offset + info.element_offset_in_texture);
+				render_manager.SetClipMask(ClipMaskOperation::SetInverse, &geometry_padding_border, element_offset_in_texture);
+				geometry_shadow.Render(shadow_offset + element_offset_in_texture);
 			}
 
 			if (blur)
@@ -240,6 +234,12 @@ void GeometryBoxShadow::GenerateTexture(CallbackTexture& out_shadow_texture, Geo
 		return true;
 	};
 
+	Mesh mesh = out_shadow_geometry.Release(Geometry::ReleaseMode::ClearMesh);
+	const byte alpha = byte(opacity * 255.f);
+	MeshUtilities::GenerateQuad(mesh, -element_offset_in_texture, Vector2f(texture_dimensions), ColourbPremultiplied(alpha, alpha));
+
 	out_shadow_texture = render_manager.MakeCallbackTexture(std::move(texture_callback));
+	out_shadow_geometry = render_manager.MakeGeometry(std::move(mesh));
 }
+
 } // namespace Rml

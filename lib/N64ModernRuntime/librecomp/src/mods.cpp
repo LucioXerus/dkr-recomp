@@ -7,6 +7,7 @@
 #include "librecomp/mods.hpp"
 #include "librecomp/overlays.hpp"
 #include "librecomp/game.hpp"
+#include "librecomp/patcher.hpp"
 #include "recompiler/context.h"
 #include "recompiler/live_recompiler.h"
 
@@ -252,6 +253,7 @@ namespace modpaths {
     constexpr std::string_view default_mod_extension = "nrm";
     constexpr std::string_view binary_path = "mod_binary.bin";
     constexpr std::string_view binary_syms_path = "mod_syms.bin";
+    constexpr std::string_view rom_patch_path = "patch.bps";
 };
 
 recomp::mods::CodeModLoadError recomp::mods::validate_api_version(uint32_t api_version, std::string& error_param) {
@@ -916,6 +918,16 @@ recomp::mods::ModContext::ModContext() {
         .on_reordered = nullptr
     };
     code_content_type_id = register_content_type(code_content_type);
+
+    // Register the ROM patch content type.
+    ModContentType rom_patch_content_type {
+        .content_filename = std::string{modpaths::rom_patch_path},
+        .allow_runtime_toggle = false,
+        .on_enabled = nullptr,
+        .on_disabled = nullptr,
+        .on_reordered = nullptr
+    };
+    rom_patch_content_type_id = register_content_type(rom_patch_content_type);
     
     // Register the default mod container type (.nrm) and allow it to have any content type by passing an empty vector.
     register_container_type(std::string{ modpaths::default_mod_extension }, {}, true);
@@ -1246,6 +1258,7 @@ struct RegeneratedSection {
     size_t first_func_index;
     size_t first_reloc_index;
     bool relocatable;
+    std::optional<uint32_t> got_ram_addr;
 };
 
 struct RegeneratedFunction {
@@ -1311,6 +1324,7 @@ N64Recomp::Context context_from_regenerated_list(const RegeneratedList& regenlis
         section_out.executable = true;
         section_out.relocatable = section_in.relocatable;
         section_out.has_mips32_relocs = false;
+        section_out.got_ram_addr = section_in.got_ram_addr;
 
         std::vector<size_t>& section_funcs_out = ret.section_functions[section_index];
         section_funcs_out.resize(cur_num_funcs);
@@ -1610,6 +1624,51 @@ std::vector<recomp::mods::ModLoadErrorDetails> recomp::mods::ModContext::load_mo
         return ret;
     }
 
+    // Check for ROM patches.
+    size_t rom_patch_mod_index = (size_t)-1;
+    for (size_t mod_index : active_mods) {
+        auto& mod = opened_mods[mod_index];
+        auto find_it = std::find(mod.content_types.begin(), mod.content_types.end(), rom_patch_content_type_id);
+        if (find_it != mod.content_types.end()) {
+            // If a mod has already provided a patch, mark the two as incompatible.
+            if (rom_patch_mod_index != (size_t)-1) {
+                ret.emplace_back(mod.manifest.mod_id, ModLoadError::RomPatchConflict, "conflicts with " + opened_mods[rom_patch_mod_index].manifest.display_name);
+            }
+            else {
+                rom_patch_mod_index = mod_index;
+            }
+        }
+    }
+
+    // Exit early if errors were found.
+    if (!ret.empty()) {
+        unload_mods();
+        return ret;
+    }
+
+    // Apply a ROM patch if one was found.
+    if (rom_patch_mod_index != (size_t)-1) {
+        auto& mod = opened_mods[rom_patch_mod_index];
+        
+        bool patch_exists;
+        std::vector<char> patch_data = mod.manifest.file_handle->read_file(std::string{ modpaths::rom_patch_path }, patch_exists);
+        std::vector<uint8_t> patched_rom;
+
+        // This should never happen, as the content type's presence means the patch file exists. Catch it just in case regardless.
+        if (!patch_exists) {
+            ret.emplace_back(mod.manifest.mod_id, ModLoadError::FailedToLoadPatch, "Internal error");
+            return ret;
+        }
+        
+        auto patch_result = recomp::patcher::patch_rom(recomp::get_rom(), std::span{ reinterpret_cast<const uint8_t*>(patch_data.data()), patch_data.size() }, patched_rom);
+        if (patch_result != recomp::patcher::PatcherResult::Success) {
+            ret.emplace_back(mod.manifest.mod_id, ModLoadError::FailedToLoadPatch, std::string{});
+            return ret;
+        }
+
+        recomp::set_rom_contents(std::move(patched_rom));
+    }
+
     // Check that mod dependencies are met.
     for (size_t mod_index : active_mods) {
         auto& mod = opened_mods[mod_index];
@@ -1799,13 +1858,16 @@ std::vector<recomp::mods::ModLoadErrorDetails> build_regen_list(
 
             uint16_t section_index = find_section_it->second;
             uint32_t section_ram_addr;
+            std::optional<uint32_t> got_ram_addr;
 
             if constexpr (patched_regenlist) {
                 section_ram_addr = recomp::overlays::get_patch_section_ram_addr(section_index);
                 cur_section_relocs = recomp::overlays::get_patch_section_relocs(section_index);
+                got_ram_addr = std::nullopt;
             }
             else {
                 section_ram_addr = recomp::overlays::get_section_ram_addr(section_index);
+                got_ram_addr = recomp::overlays::get_section_got_ram_addr(section_index);
                 cur_section_relocs = recomp::overlays::get_section_relocs(section_index);
             }
 
@@ -1817,7 +1879,8 @@ std::vector<recomp::mods::ModLoadErrorDetails> build_regen_list(
                 .first_func_index = regenlist.functions.size(),
                 .first_reloc_index = regenlist.relocs.size(),
                 // Patch sections are never relocatable, so a section is relocatable if it has any relocs and is not a base patch section.
-                .relocatable = !patched_regenlist && !cur_section_relocs.empty()
+                .relocatable = !patched_regenlist && !cur_section_relocs.empty(),
+                .got_ram_addr = got_ram_addr
             });
 
             // Update the tracked section fields.

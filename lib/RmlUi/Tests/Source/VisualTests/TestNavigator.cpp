@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "TestNavigator.h"
 #include "CaptureScreen.h"
 #include "TestConfig.h"
@@ -7,7 +35,6 @@
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/Math.h>
-#include <RmlUi/Core/SystemInterface.h>
 #include <Shell.h>
 #include <cstdio>
 
@@ -230,7 +257,7 @@ void TestNavigator::ProcessEvent(Rml::Event& event)
 			}
 			else if (goto_index >= 0)
 			{
-				CancelGoTo();
+				goto_index = -1;
 				UpdateGoToText();
 			}
 		}
@@ -242,9 +269,9 @@ void TestNavigator::ProcessEvent(Rml::Event& event)
 		{
 			if (goto_index < 0)
 			{
-				element_filter_input->Blur();
-				StartGoTo();
+				goto_index = 0;
 				UpdateGoToText();
+				element_filter_input->Blur();
 			}
 		}
 	}
@@ -313,7 +340,7 @@ void TestNavigator::ProcessEvent(Rml::Event& event)
 		else if (goto_index >= 0 && key_identifier == Rml::Input::KI_BACK)
 		{
 			if (goto_index <= 0)
-				CancelGoTo();
+				goto_index = -1;
 			else
 				goto_index = goto_index / 10;
 
@@ -344,7 +371,7 @@ void TestNavigator::ProcessEvent(Rml::Event& event)
 						out_of_bounds = true;
 				}
 
-				CancelGoTo();
+				goto_index = -1;
 				UpdateGoToText(out_of_bounds);
 			}
 		}
@@ -538,6 +565,12 @@ void TestNavigator::StopTestSuiteIteration()
 			suite.SetIndex(i);
 			log += Rml::CreateString("%5d   %s\n", i + 1, suite.GetFilename().c_str());
 		}
+		log += "\nEqual:\n";
+		for (int i : equal)
+		{
+			suite.SetIndex(i);
+			log += Rml::CreateString("%5d   %s\n", i + 1, suite.GetFilename().c_str());
+		}
 
 		const Rml::String log_path = GetCaptureOutputDirectory() + "/comparison.log";
 		bool save_result = SaveFile(log_path, log);
@@ -557,19 +590,6 @@ void TestNavigator::StopTestSuiteIteration()
 
 	suite.SetIndex(iteration_initial_index);
 	LoadActiveTest();
-}
-
-void TestNavigator::StartGoTo()
-{
-	goto_index = 0;
-	const Rml::Rectanglef area = viewer->GetGoToArea();
-	Rml::GetSystemInterface()->ActivateKeyboard(area.TopLeft(), area.Height());
-}
-
-void TestNavigator::CancelGoTo()
-{
-	Rml::GetSystemInterface()->DeactivateKeyboard();
-	goto_index = -1;
 }
 
 void TestNavigator::UpdateGoToText(bool out_of_bounds)

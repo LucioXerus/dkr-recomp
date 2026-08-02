@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "ElementInfo.h"
 #include "../../Include/RmlUi/Core/Context.h"
 #include "../../Include/RmlUi/Core/Core.h"
@@ -73,7 +101,7 @@ void ElementInfo::OnUpdate()
 
 		constexpr float update_interval = 0.3f;
 
-		if (dt >= update_interval || force_update_once)
+		if (dt > update_interval || (force_update_once))
 		{
 			if (force_update_once && source_element)
 			{
@@ -86,9 +114,6 @@ void ElementInfo::OnUpdate()
 
 			UpdateSourceElement();
 		}
-
-		if (Context* context = GetContext())
-			context->RequestNextUpdate(update_interval);
 	}
 
 	if (title_dirty)
@@ -183,7 +208,8 @@ void ElementInfo::ProcessEvent(Event& event)
 
 				if (id == "close_button")
 				{
-					Hide();
+					if (IsVisible())
+						SetProperty(PropertyId::Visibility, Property(Style::Visibility::Hidden));
 				}
 				else if (id == "update_source")
 				{
@@ -616,10 +642,17 @@ void ElementInfo::BuildElementPropertiesRML(String& property_rml, Element* eleme
 {
 	NamedPropertyList property_list;
 
-	for (auto it = element->IterateLocalProperties(primary_element != element ? primary_element : nullptr); !it.AtEnd(); ++it)
+	for (auto it = element->IterateLocalProperties(); !it.AtEnd(); ++it)
 	{
-		const auto& [property_name, property] = *it;
-		property_list.push_back(NamedProperty{property_name, &property});
+		PropertyId property_id = it.GetId();
+		const String& property_name = it.GetName();
+		const Property* prop = &it.GetProperty();
+
+		// Check that this property isn't overridden or just not inherited.
+		if (primary_element->GetProperty(property_id) != prop)
+			continue;
+
+		property_list.push_back(NamedProperty{property_name, prop});
 	}
 
 	std::sort(property_list.begin(), property_list.end(), [](const NamedProperty& a, const NamedProperty& b) {
@@ -631,7 +664,13 @@ void ElementInfo::BuildElementPropertiesRML(String& property_rml, Element* eleme
 			return false;
 		if (a.second->specificity > b.second->specificity)
 			return true;
-		return a.first < b.first;
+		if (a.second->definition && !b.second->definition)
+			return false;
+		if (!a.second->definition && b.second->definition)
+			return true;
+		const String& a_name = StyleSheetSpecification::GetPropertyName(a.second->definition->GetId());
+		const String& b_name = StyleSheetSpecification::GetPropertyName(b.second->definition->GetId());
+		return a_name < b_name;
 	});
 
 	if (!property_list.empty())

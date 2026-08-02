@@ -33,14 +33,9 @@ if Options.datamodel == nil then
 		options_changed = false,
 		audios = {
 			{id="reverb", label="Reverb", checked=true},
-			{id="3d", label="3D Spatialisation", checked=false},
+			{id="3d", label="3D Spatialisation"},
 		}
 	})
-end
-
-function Options.CloseDataModel()
-	rmlui.contexts["main"]:CloseDataModel("options")
-	Options.datamodel = nil
 end
 
 function Options.Serialize(filename,options)
@@ -86,7 +81,7 @@ function Options.LoadOptions(document)
 end
 
 function Options.SaveOptions(event)
-	if event.parameters['button'] ~= 'Accept' then
+	if event.parameters['button'] == 'cancel' then
 		return
 	end
 
@@ -102,8 +97,8 @@ function Options.SaveOptions(event)
 end
 	</script>
 	</head>
-	<body template="luawindow" onload="Window.OnWindowLoad(document) Options.LoadOptions(document)" onkeydown="if Window.EscapePressed(event) then Options.CloseDataModel() Window.LoadMenu('main_menu',document) end">
-		<form data-model="options" onsubmit="Options.SaveOptions(event) Options.CloseDataModel() Window.LoadMenu('main_menu',document)" data-event-change="options_changed = true">
+	<body template="luawindow" onload="Window.OnWindowLoad(document) Options.LoadOptions(document)" onkeydown="if Window.EscapePressed(event) then Window.LoadMenu('main_menu',document) end">
+		<form data-model="options" onsubmit="Options.SaveOptions(event) Window.LoadMenu('main_menu',document)" data-event-change="options_changed = true">
 			<div>
 				<p>
 					Graphics<br />
@@ -115,12 +110,12 @@ end
 				<p>
 					Audio<br />
 					<span data-for="audio : audios">
-						<label><input data-attr-id="audio.id" type="checkbox" data-attr-name="audio.id" data-checked="audio.checked" /> {{audio.label}}</label><br />
+						<label><input data-attr-id="audio.id" type="checkbox" data-attr-name="audio.id" data-attrif-checked="audio.checked" /> {{audio.label}}</label><br />
 					</span>
 				</p>
 			</div>
-			<input type="submit" name="button" value="Accept" data-attrif-disabled="!options_changed"/>
-			<input type="submit" name="button" value="Cancel"/>
+			<input type="submit" name="button" value="accept" data-attrif-disabled="!options_changed">Accept</input>
+			<input type="submit" name="button" value="cancel">Cancel</input>
 		</form>
 	</body>
 </rml>

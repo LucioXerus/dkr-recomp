@@ -272,21 +272,25 @@ int main(int argc, char** argv) {
         std::exit(EXIT_FAILURE);
     };
 
-    bool dumping_context;
+    bool dumping_context = false;
 
-    if (argc >= 3) {
-        std::string arg2 = argv[2];
-        if (arg2 == "--dump-context") {
-            dumping_context = true;
-        } else {
-            fmt::print("Usage: {} <config file> [--dump-context]\n", argv[0]);
-            std::exit(EXIT_SUCCESS);
-        }
-    } else {
-        dumping_context = false;
+    if (argc < 2) {
+        fmt::print("Usage: {} <config file> [--dump-context]\n", argv[0]);
+        return EXIT_SUCCESS;
     }
 
     const char* config_path = argv[1];
+
+    for (size_t i = 2; i < argc; i++) {
+        std::string_view cur_arg = argv[i];
+        if (cur_arg == "--dump-context") {
+            dumping_context = true;
+        }
+        else {
+            fmt::print("Unknown argument \"{}\"\n", cur_arg);
+            return EXIT_FAILURE;
+        }
+    }
 
     N64Recomp::Config config{ config_path };
     if (!config.good()) {
@@ -309,6 +313,9 @@ int main(int argc, char** argv) {
 
     std::unordered_set<std::string> relocatable_sections{};
     relocatable_sections.insert(relocatable_sections_ordered.begin(), relocatable_sections_ordered.end());
+
+    std::unordered_set<std::string> ignored_syms_set{};
+    ignored_syms_set.insert(config.ignored_funcs.begin(), config.ignored_funcs.end());
 
     N64Recomp::Context context{};
     
@@ -347,11 +354,17 @@ int main(int argc, char** argv) {
         N64Recomp::ElfParsingConfig elf_config {
             .bss_section_suffix = config.bss_section_suffix,
             .relocatable_sections = std::move(relocatable_sections),
+            .ignored_syms = std::move(ignored_syms_set),
+            .mdebug_text_map = config.mdebug_text_map,
+            .mdebug_data_map = config.mdebug_data_map,
+            .mdebug_rodata_map = config.mdebug_rodata_map,
+            .mdebug_bss_map = config.mdebug_bss_map,
             .has_entrypoint = config.has_entrypoint,
             .entrypoint_address = config.entrypoint,
             .use_absolute_symbols = config.use_absolute_symbols,
             .unpaired_lo16_warnings = config.unpaired_lo16_warnings,
             .all_sections_relocatable = false,
+            .use_mdebug = config.use_mdebug,
         };
 
         for (const auto& func_size : config.manual_func_sizes) {
@@ -359,7 +372,9 @@ int main(int argc, char** argv) {
         }
 
         bool found_entrypoint_func;
-        N64Recomp::Context::from_elf_file(config.elf_path, context, elf_config, dumping_context, data_syms, found_entrypoint_func);
+        if (!N64Recomp::Context::from_elf_file(config.elf_path, context, elf_config, dumping_context, data_syms, found_entrypoint_func)) {
+            exit_failure("Failed to parse elf\n");
+        }
 
         // Add any manual functions
         add_manual_functions(context, config.manual_functions);
@@ -646,6 +661,11 @@ int main(int argc, char** argv) {
                         continue;
                     }
 
+                    // Ignore R_MIPS_NONE relocs, which get produced during symbol parsing for non-relocatable reference sections.
+                    if (reloc.type == N64Recomp::RelocType::R_MIPS_NONE) {
+                        continue;
+                    }
+
                     // Check if the reloc points to the event section.
                     if (reloc.target_section == event_section_index) {
                         // It does, so find the function it's pointing at.
@@ -774,7 +794,7 @@ int main(int argc, char** argv) {
 
             // Search for the closest function 
             size_t closest_func_index = 0;
-            while (section_funcs[closest_func_index] < static_func_addr && closest_func_index < section_funcs.size()) {
+            while (closest_func_index < section_funcs.size() && section_funcs[closest_func_index] < static_func_addr) {
                 closest_func_index++;
             }
 
@@ -900,11 +920,13 @@ int main(int argc, char** argv) {
                 std::string section_funcs_array_name = fmt::format("section_{}_{}_funcs", section_index, section_name_trimmed);
                 std::string section_relocs_array_name = section_relocs.empty() ? "nullptr" : fmt::format("section_{}_{}_relocs", section_index, section_name_trimmed);
                 std::string section_relocs_array_size = section_relocs.empty() ? "0" : fmt::format("ARRLEN({})", section_relocs_array_name);
+                std::string section_got_ram_addr = !section.got_ram_addr.has_value() ? "std::nullopt" : fmt::format("0x{:08X}", section.got_ram_addr.value());
 
                 // Write the section's table entry.
-                section_load_table += fmt::format("    {{ .rom_addr = 0x{0:08X}, .ram_addr = 0x{1:08X}, .size = 0x{2:08X}, .funcs = {3}, .num_funcs = ARRLEN({3}), .relocs = {4}, .num_relocs = {5}, .index = {6} }},\n",
+                section_load_table += fmt::format("    {{ .rom_addr = 0x{0:08X}, .ram_addr = 0x{1:08X}, .size = 0x{2:08X}, .funcs = {3}, .num_funcs = ARRLEN({3}), .relocs = {4}, .num_relocs = {5}, .index = {6}, .got_ram_addr = {7} }},\n",
                                                   section.rom_addr, section.ram_addr, section.size, section_funcs_array_name,
-                                                  section_relocs_array_name, section_relocs_array_size, section_index);
+                                                  section_relocs_array_name, section_relocs_array_size, section_index,
+                                                  section_got_ram_addr);
 
                 // Write the section's functions.
                 fmt::print(overlay_file, "static FuncEntry {}[] = {{\n", section_funcs_array_name);

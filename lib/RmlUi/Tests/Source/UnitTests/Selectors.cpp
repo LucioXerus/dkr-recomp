@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../Common/TestsShell.h"
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/Core.h>
@@ -39,9 +67,6 @@ static const String doc_end = R"(
 		<p  id="G" class/>
 		<p  id="H" class="world hello"/>
 	</div>
-	<div id="EscClass" class="w-[460px] hover:state dot.value hash#value"/>
-	<div id="escaped#id"/>
-	<div id="AttrEsc" data-value="a]b" data-token="w-[460px]"/>
 	<input id="I" type="checkbox" checked/>
 </body>
 </rml>
@@ -84,14 +109,14 @@ static const Vector<QuerySelector> query_selectors =
 	{ ".parent > *",                 "A B C D E F G H" },
 	{ ":checked",                    "I",               SelectorOp::RemoveChecked,        "I", "" },
 
-	{ "*",                           "X Y Z P A B C D D0 D1 E F F0 G H EscClass escaped#id AttrEsc I" },
+	{ "*",                           "X Y Z P A B C D D0 D1 E F F0 G H I" },
 	{ "*span",                       "Y D0 D1 F0" },
 	{ "*.hello",                     "X Z H" },
 	{ "*:checked",                   "I" },
-
+	
 	{ "p[unit='m']",                 "B" },
 	{ "p[unit=\"m\"]",               "B" },
-	{ "[class]",                     "X Y Z P F0 G H EscClass" },
+	{ "[class]",                     "X Y Z P F0 G H" },
 	{ "[class=hello]",               "X" },
 	{ "[class=]",                    "G" },
 	{ "[class='']",                  "G" },
@@ -100,11 +125,11 @@ static const Vector<QuerySelector> query_selectors =
 	{ "[class~=ello]",               "" },
 	{ "[class|=hello]",              "X F0" },
 	{ "[class^=hello]",              "X Z F0" },
-	{ "[class^=]",                   "X Y Z P F0 G H EscClass" },
+	{ "[class^=]",                   "X Y Z P F0 G H" },
 	{ "[class$=hello]",              "X H" },
 	{ "[class*=hello]",              "X Z F0 H" },
 	{ "[class*=ello]",               "X Z F0 H" },
-
+	
 	{ "[class~=hello].world",         "Z H" },
 	{ "*[class~=hello].world",        "Z H" },
 	{ ".world[class~=hello]",         "Z H" },
@@ -117,10 +142,10 @@ static const Vector<QuerySelector> query_selectors =
 	{ "[invalid",                     "", 1, 4 },
 	{ "[]",                           "", 1, 4 },
 	{ "[x=Rule{What}]",               "", 2, 0 },
-	{ "[x=Hello,world]",              "", 1, 2 },
+	{ "[x=Hello,world]",              "", 1, 2 }, 
 	// The next ones are valid in CSS but we currently don't bother handling them, just make sure we don't crash.
 	{ "[x='Rule{What}']",             "", 2, 0 },
-	{ "[x='Hello,world']",            "", 1, 2 },
+	{ "[x='Hello,world']",            "", 1, 2 }, 
 
 	{ "#X[class=hello]",              "X" },
 	{ "[class=hello]#X",              "X" },
@@ -128,7 +153,7 @@ static const Vector<QuerySelector> query_selectors =
 	{ "div[class=hello]",             "X" },
 	{ "[class=hello]div",             "X" },
 	{ "span[class=hello]",            "" },
-
+	
 	{ ".parent :nth-child(odd)",     "A C D0 E F0 G" },
 	{ ".parent > :nth-child(even)",  "B D F H",         SelectorOp::RemoveClasses,        "parent", "" },
 	{ ":first-child",                "X A D0 F0",       SelectorOp::RemoveElementsByIds,  "A F0", "X B D0" },
@@ -147,23 +172,15 @@ static const Vector<QuerySelector> query_selectors =
 	{ ":nth-child(4) * span:first-child", "D0 F0",      SelectorOp::RemoveElementsByIds,  "X",    "" },
 	{ "p:nth-last-of-type(3n+1)",    "D H" },
 	{ ":first-of-type",              "X Y A B D0 E F0 I" },
-	{ ":last-of-type",               "Y A D1 E F0 H AttrEsc I" },
+	{ ":last-of-type",               "Y P A D1 E F0 H I" },
 	{ ":only-child",                 "F0",              SelectorOp::RemoveElementsByIds,  "D0",    "D1 F0" },
 	{ ":only-of-type",               "Y A E F0 I" },
 	{ "span:empty",                  "Y D0 F0" },
-
+	
 	{ ".hello.world, #P span, #I",   "Z D0 D1 F0 H I",  SelectorOp::RemoveClasses,        "world", "D0 D1 F0 I" },
 	{ "body * span",                 "D0 D1 F0" },
 	{ "D1 *",                        "" },
-	{ ".w-\\[460px\\]",           "EscClass" },
-	{ ".hover\\:state",            "EscClass" },
-	{ ".dot\\.value",              "EscClass" },
-	{ ".hash\\#value",             "EscClass" },
-	{ "#escaped\\#id",             "escaped#id" },
-	{ "[data-value='a\\]b']",      "AttrEsc" },
-	{ "[data-token='w-\\[460px\\]']", "AttrEsc" },
-	{ "[class~=w-\\[460px\\]]",   "EscClass" },
-
+	
 	{ "#E + #F",                     "F",               SelectorOp::InsertElementBefore,  "F",     "" },
 	{ "#E+#F",                       "F" },
 	{ "#E +#F",                      "F" },
@@ -172,10 +189,10 @@ static const Vector<QuerySelector> query_selectors =
 	{ "#A + #B",                     "B",               SelectorOp::RemoveId,             "A", "" },
 	{ "* + #A",                      "" },
 	{ "#H + *",                      "" },
-	{ "#P + *",                      "EscClass" },
+	{ "#P + *",                      "I" },
 	{ "div.parent > #B + p",         "C" },
 	{ "div.parent > #B + div",       "" },
-
+	
 	{ "#B ~ #F",                     "F" },
 	{ "#B~#F",                       "F" },
 	{ "#B ~#F",                      "F" },
@@ -185,9 +202,9 @@ static const Vector<QuerySelector> query_selectors =
 	{ "div.parent > #B ~ * span",    "D0 D1 F0" },
 
 	{ ":not(*)",                     "" },
-	{ ":not(span)",                  "X Z P A B C D E F G H EscClass escaped#id AttrEsc I" },
+	{ ":not(span)",                  "X Z P A B C D E F G H I" },
 	{ "#D :not(#D0)",                "D1" },
-	{ "body > :not(:checked)",       "X Y Z P EscClass escaped#id AttrEsc", SelectorOp::RemoveChecked, "I", "X Y Z P EscClass escaped#id AttrEsc I" },
+	{ "body > :not(:checked)",       "X Y Z P",         SelectorOp::RemoveChecked,        "I", "X Y Z P I" },
 	{ "div.hello:not(.world)",       "X" },
 	{ ":not(div,:nth-child(2),p *)", "A C D E F G H I" },
 
@@ -239,46 +256,8 @@ static const Vector<MatchesSelector> matches_selectors =
 	{ "E", "h3",             true },
 	{ "G", "p#G[class]",     true },
 	{ "G", "p#G[missing]",   false },
-	{ "B", "[unit='m']",     true },
-	{ "EscClass", ".w-\\[460px\\]", true },
-	{ "EscClass", ".hover\\:state",  true },
-	{ "EscClass", ".dot\\.value",    true },
-	{ "EscClass", ".hash\\#value",   true },
-	{ "AttrEsc", "[data-value='a\\]b']", true }
+	{ "B", "[unit='m']",     true }
 };
-
-struct ScopeSelector : public QuerySelector {
-	String scope_selector;
-
-	ScopeSelector(const String& scope_selector, const String& selector, const String& expected_ids) :
-		QuerySelector(selector, expected_ids), scope_selector(scope_selector)
-	{}
-};
-static const Vector<ScopeSelector> scope_selectors =
-{
-	{ "",       ":scope *",                  "X Y Z P A B C D D0 D1 E F F0 G H EscClass escaped#id AttrEsc I" }, // should be equivalent to just "*"
-	{ "",       ":scope > *",                "X Y Z P EscClass escaped#id AttrEsc I" },
-	{ "",       ":scope > *:not(:checked)",  "X Y Z P EscClass escaped#id AttrEsc" },
-	{ "#P",     ":scope > p",                "B C D F G H" },
-	{ "#P",     ":scope span",               "D0 D1 F0" },
-};
-
-struct ContainsSelector {
-	String element_id;
-	String target_id;
-	bool expected_result;
-};
-static const Vector<ContainsSelector> contains_selectors =
-{
-	{ "A",  "A",  true },
-	{ "P",  "A",  true },
-	{ "A",  "P",  false },
-	{ "P",  "D0", true },
-	{ "D0", "P",  false },
-	{ "X",  "P",  false },
-	{ "P",  "X",  false },
-};
-
 // clang-format on
 
 // Recursively iterate through 'element' and all of its descendants to find all
@@ -477,114 +456,5 @@ TEST_CASE("Selectors")
 		context->UnloadDocument(document);
 	}
 
-	SUBCASE("Scope")
-	{
-		const String document_string = doc_begin + doc_end;
-		ElementDocument* document = context->LoadDocumentFromMemory(document_string);
-		REQUIRE(document);
-
-		for (const ScopeSelector& selector : scope_selectors)
-		{
-			Element* start = (selector.scope_selector.empty() ? document : document->QuerySelector(selector.scope_selector));
-			REQUIRE(start);
-
-			ElementList elements;
-			start->QuerySelectorAll(elements, selector.selector);
-			String matching_ids = ElementListToIds(elements);
-
-			Element* first_element = start->QuerySelector(selector.selector);
-			if (first_element)
-			{
-				CHECK_MESSAGE(first_element == elements[0], "QuerySelector does not return the first match of QuerySelectorAll.");
-			}
-			else
-			{
-				CHECK_MESSAGE(elements.empty(), "QuerySelector found nothing, while QuerySelectorAll found " << elements.size() << " element(s).");
-			}
-
-			CHECK_MESSAGE(matching_ids == selector.expected_ids, "QuerySelector: " << selector.selector);
-		}
-		context->UnloadDocument(document);
-	}
-
-	SUBCASE("Contains")
-	{
-		const String document_string = doc_begin + doc_end;
-		ElementDocument* document = context->LoadDocumentFromMemory(document_string);
-		REQUIRE(document);
-
-		for (const ContainsSelector& selector : contains_selectors)
-		{
-			Element* element = document->GetElementById(selector.element_id);
-			Element* target = document->GetElementById(selector.target_id);
-			REQUIRE(element);
-			REQUIRE(target);
-			CHECK_MESSAGE(element->Contains(target) == selector.expected_result,
-				"'" << selector.element_id << "' contains '" << selector.target_id << "'");
-		}
-		context->UnloadDocument(document);
-	}
-
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("Selectors.placeholder")
-{
-	Context* context = TestsShell::GetContext();
-	const String document_rml = R"(
-<rml>
-<head>
-	<title>Demo</title>
-	<link type="text/rcss" href="/../Tests/Data/style.rcss" />
-	<style>
-		body {
-			width: 800px;
-			height: 800px;
-		}
-	</style>
-</head>
-<body>
-	<input id="A" type="text" placeholder="Some placeholder" />
-	<input id="B" type="text" placeholder="Some placeholder" value="I has value" />
-	<div id="C"/>
-	<div id="D"/>
-</body>
-</rml>
-)";
-
-	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
-	// The following sets "::placeholder-shown" rather than ":placeholder-shown", which should be recognized as two different pseudo-classes.
-	document->GetElementById("D")->SetPseudoClass(":placeholder-shown", true);
-	document->Show();
-
-	auto CheckSelector = [document](const String& selector, const String& expected_ids) {
-		ElementList elements;
-		document->QuerySelectorAll(elements, selector);
-		CHECK_MESSAGE(ElementListToIds(elements) == expected_ids, "Selector: ", selector);
-	};
-
-	CheckSelector(":placeholder-shown", "A");
-	CheckSelector("::placeholder-shown", "D");
-	CheckSelector("div::placeholder-shown", "D");
-
-	CheckSelector("input:placeholder-shown", "A");
-	CheckSelector("input.text:placeholder-shown", "A");
-	CheckSelector("input[type=text]:placeholder-shown", "A");
-	CheckSelector("input[type=password]:placeholder-shown", "");
-	CheckSelector("input::other", "");
-
-	document->GetElementById("B")->SetAttribute("value", "");
-	TestsShell::RenderLoop();
-	CheckSelector(":placeholder-shown", "A B");
-
-	document->GetElementById("A")->SetAttribute("placeholder", "");
-	TestsShell::RenderLoop();
-	CheckSelector(":placeholder-shown", "B");
-
-	document->GetElementById("B")->SetAttribute("value", "Some value again");
-	TestsShell::RenderLoop();
-	CheckSelector(":placeholder-shown", "");
-
-	context->UnloadDocument(document);
 	TestsShell::ShutdownShell();
 }

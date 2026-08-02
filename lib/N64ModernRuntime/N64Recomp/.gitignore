@@ -48,3 +48,6 @@ rt64.log
 .idea
 cmake-build*
 .DS_Store
+
+# clangd cache
+.cache/

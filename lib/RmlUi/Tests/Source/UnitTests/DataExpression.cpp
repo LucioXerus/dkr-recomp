@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../../../Source/Core/DataExpression.cpp"
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/Types.h>
@@ -65,15 +93,11 @@ TEST_CASE("Data expressions")
 	int num_trolls = 1;
 	String color_name = "color";
 	Colourb color_value = Colourb(180, 100, 255);
-	std::vector<String> num_multi = {"left", "right"};
 
 	DataModelConstructor constructor(&model);
-	constructor.RegisterArray<std::vector<String>>();
-
 	constructor.Bind("radius", &radius);
 	constructor.Bind("color_name", &color_name);
 	constructor.Bind("num_trolls", &num_trolls);
-	constructor.Bind("num_multi", &num_multi);
 	constructor.BindFunc("color_value", [&](Variant& variant) { variant = ToString(color_value); });
 
 	constructor.RegisterTransformFunc("concatenate", [](const VariantList& arguments) -> Variant {
@@ -168,8 +192,4 @@ TEST_CASE("Data expressions")
 	handle.DirtyVariable("num_trolls");
 	CHECK(TestExpression("concatenate('It takes', num_trolls*3 + ' goats', 'to outsmart', num_trolls | number_suffix('troll','trolls'))") ==
 		"It takes,9 goats,to outsmart,3 trolls");
-
-	// Test that only one side of ternary is evaluated
-	CHECK(TestExpression("true ? num_multi[0] : num_multi[999]") == "left");
-	CHECK(TestExpression("false ? num_multi[999] : num_multi[1]") == "right");
 }

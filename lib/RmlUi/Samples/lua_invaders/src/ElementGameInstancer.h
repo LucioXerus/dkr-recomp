@@ -1,4 +1,5 @@
-#pragma once
+#ifndef RMLUI_LUAINVADERS_ELEMENTGAMEINSTANCER_H
+#define RMLUI_LUAINVADERS_ELEMENTGAMEINSTANCER_H
 
 #include <RmlUi/Core/ElementInstancer.h>
 
@@ -15,3 +16,5 @@ public:
 	/// @param element to release
 	void ReleaseElement(Rml::Element* element) override;
 };
+
+#endif

@@ -1,61 +1,98 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../../Include/RmlUi/SVG/ElementSVG.h"
-#include "../../Include/RmlUi/Core/ElementUtilities.h"
-#include "../../Include/RmlUi/Core/Geometry.h"
+#include "../../Include/RmlUi/Core/ComputedValues.h"
+#include "../../Include/RmlUi/Core/Core.h"
+#include "../../Include/RmlUi/Core/ElementDocument.h"
+#include "../../Include/RmlUi/Core/FileInterface.h"
+#include "../../Include/RmlUi/Core/Math.h"
+#include "../../Include/RmlUi/Core/MeshUtilities.h"
 #include "../../Include/RmlUi/Core/PropertyIdSet.h"
-#include "SVGCache.h"
+#include "../../Include/RmlUi/Core/RenderManager.h"
+#include "../../Include/RmlUi/Core/SystemInterface.h"
+#include <cmath>
+#include <lunasvg.h>
+#include <string.h>
 
 namespace Rml {
 
-unsigned long ElementSVG::internal_id_counter = 0;
-
 ElementSVG::ElementSVG(const String& tag) : Element(tag) {}
-ElementSVG::~ElementSVG()
-{
-	handle.reset();
-}
+
+ElementSVG::~ElementSVG() {}
 
 bool ElementSVG::GetIntrinsicDimensions(Vector2f& dimensions, float& ratio)
 {
-	EnsureSourceLoaded();
+	if (source_dirty)
+		LoadSource();
 
-	dimensions = handle ? handle->intrinsic_dimensions : Vector2f(0);
+	dimensions = intrinsic_dimensions;
 
 	if (HasAttribute("width"))
 	{
-		dimensions.x = GetAttribute<float>("width", 0);
+		dimensions.x = GetAttribute<float>("width", -1);
 	}
 	if (HasAttribute("height"))
 	{
-		dimensions.y = GetAttribute<float>("height", 0);
+		dimensions.y = GetAttribute<float>("height", -1);
 	}
 
 	if (dimensions.y > 0)
 		ratio = dimensions.x / dimensions.y;
-
-	dimensions *= ElementUtilities::GetDensityIndependentPixelRatio(this);
 
 	return true;
 }
 
 void ElementSVG::OnRender()
 {
-	EnsureSourceLoaded();
-	if (handle)
-		handle->geometry.Render(GetAbsoluteOffset(BoxArea::Content), handle->texture);
+	if (svg_document)
+	{
+		if (geometry_dirty)
+			GenerateGeometry();
+
+		UpdateTexture();
+		geometry.Render(GetAbsoluteOffset(BoxArea::Content), Texture(texture));
+	}
 }
 
 void ElementSVG::OnResize()
 {
-	svg_dirty = true;
+	geometry_dirty = true;
+	texture_dirty = true;
 }
 
 void ElementSVG::OnAttributeChange(const ElementAttributes& changed_attributes)
 {
 	Element::OnAttributeChange(changed_attributes);
 
-	if (changed_attributes.count("src") || changed_attributes.count("crop-to-content"))
+	if (changed_attributes.count("src"))
 	{
-		svg_dirty = true;
+		source_dirty = true;
 		DirtyLayout();
 	}
 
@@ -71,73 +108,100 @@ void ElementSVG::OnPropertyChange(const PropertyIdSet& changed_properties)
 
 	if (changed_properties.Contains(PropertyId::ImageColor) || changed_properties.Contains(PropertyId::Opacity))
 	{
-		svg_dirty = true;
+		geometry_dirty = true;
 	}
 }
 
-void ElementSVG::GetInnerRML(String& content) const
+void ElementSVG::GenerateGeometry()
 {
-	// If the SVG is from a file source don't add anything to the content string.
-	const auto source = GetAttribute<String>("src", "");
-	if (!source.empty())
-		return;
+	const ComputedValues& computed = GetComputedValues();
+	ColourbPremultiplied quad_colour = computed.image_color().ToPremultiplied(computed.opacity());
 
-	content += svg_data;
+	const Vector2f render_dimensions_f = GetBox().GetSize(BoxArea::Content).Round();
+	render_dimensions = Vector2i(render_dimensions_f);
+
+	Mesh mesh = geometry.Release(Geometry::ReleaseMode::ClearMesh);
+	MeshUtilities::GenerateQuad(mesh, Vector2f(0), render_dimensions_f, quad_colour, Vector2f(0), Vector2f(1));
+	geometry = GetRenderManager()->MakeGeometry(std::move(mesh));
+
+	geometry_dirty = false;
 }
 
-void ElementSVG::SetInnerRML(const String& content)
+bool ElementSVG::LoadSource()
 {
-	// If the SVG is from a file source don't set the svg xml data on the element.
-	const auto source = GetAttribute<String>("src", "");
-	if (!source.empty())
-		return;
+	source_dirty = false;
+	texture_dirty = true;
+	intrinsic_dimensions = Vector2f{};
+	texture = {};
+	svg_document.reset();
 
-	// We use CreateString instead of std::to_string to avoid having to create an extra std::string and convert it to Rml::String in case clients use
-	// a non-std string.
-	if (!HasAttribute("rmlui-svgdata-id"))
-		SetAttribute("rmlui-svgdata-id", "svgdata:" + CreateString("%lu", internal_id_counter++));
+	const String attribute_src = GetAttribute<String>("src", "");
 
-	svg_data = "" + content;
-	svg_dirty = true;
-	EnsureSourceLoaded();
-}
+	if (attribute_src.empty())
+		return false;
 
-void ElementSVG::EnsureSourceLoaded()
-{
-	if (!svg_dirty)
-		return;
+	String path = attribute_src;
+	String directory;
 
-	svg_dirty = false;
-
-	const bool crop_to_content = HasAttribute("crop-to-content");
-	const auto source = GetAttribute<String>("src", "");
-	if (source.empty())
+	if (ElementDocument* document = GetOwnerDocument())
 	{
-		const auto source_id = GetAttribute<String>("rmlui-svgdata-id", "svgdata:undefined");
-		if (handle)
-			handle.reset(); // The old handle won't be re-used so clear it.
-
-		// Build an svg wrapper tag, copying all but src attribute (expected attributes could be width, height, viewBox, etc.)
-		String svg_element_source = "<svg ";
-		ElementAttributes attrs = GetAttributes();
-		for (auto& attr : attrs)
-		{
-			if (attr.first == "src")
-				continue;
-			svg_element_source.append(attr.first);
-			svg_element_source.append("=\"");
-			svg_element_source.append(StringUtilities::EncodeRml(attr.second.Get<String>()));
-			svg_element_source.append("\" ");
-		}
-		svg_element_source.append(">");
-		svg_element_source.append(svg_data);
-		svg_element_source.append("</svg>");
-
-		handle = SVG::SVGCache::GetHandle(source_id, svg_element_source, SVG::SVGCache::Data, this, crop_to_content, BoxArea::Content);
+		const String document_source_url = StringUtilities::Replace(document->GetSourceURL(), '|', ':');
+		GetSystemInterface()->JoinPath(path, document_source_url, attribute_src);
+		GetSystemInterface()->JoinPath(directory, document_source_url, "");
 	}
-	else
+
+	String svg_data;
+
+	if (path.empty() || !GetFileInterface()->LoadFile(path, svg_data))
 	{
-		handle = SVG::SVGCache::GetHandle(source, source, SVG::SVGCache::File, this, crop_to_content, BoxArea::Content);
+		Log::Message(Rml::Log::Type::LT_WARNING, "Could not load SVG file %s", path.c_str());
+		return false;
 	}
+
+	// We use a reset-release approach here in case clients use a non-std unique_ptr (lunasvg uses std::unique_ptr)
+	svg_document.reset(lunasvg::Document::loadFromData(svg_data).release());
+
+	if (!svg_document)
+	{
+		Log::Message(Rml::Log::Type::LT_WARNING, "Could not load SVG data from file %s", path.c_str());
+		return false;
+	}
+
+	intrinsic_dimensions.x = Math::Max(float(svg_document->width()), 1.0f);
+	intrinsic_dimensions.y = Math::Max(float(svg_document->height()), 1.0f);
+
+	return true;
 }
+
+void ElementSVG::UpdateTexture()
+{
+	if (!svg_document || !texture_dirty)
+		return;
+
+	RenderManager* render_manager = GetRenderManager();
+	if (!render_manager)
+		return;
+
+	// Callback for generating texture.
+	auto texture_callback = [this](const CallbackTextureInterface& texture_interface) -> bool {
+		RMLUI_ASSERT(svg_document);
+		lunasvg::Bitmap bitmap = svg_document->renderToBitmap(render_dimensions.x, render_dimensions.y);
+
+		// Swap red and blue channels, assuming LunaSVG v2.3.2 or newer, to convert to RmlUi's expected RGBA-ordering.
+		const size_t bitmap_byte_size = bitmap.width() * bitmap.height() * 4;
+		uint8_t* bitmap_data = bitmap.data();
+		for (size_t i = 0; i < bitmap_byte_size; i += 4)
+			std::swap(bitmap_data[i], bitmap_data[i + 2]);
+
+		if (!bitmap.valid() || !bitmap.data())
+			return false;
+		if (!texture_interface.GenerateTexture({reinterpret_cast<const Rml::byte*>(bitmap.data()), bitmap_byte_size}, render_dimensions))
+			return false;
+		return true;
+	};
+
+	texture = render_manager->MakeCallbackTexture(std::move(texture_callback));
+	texture_dirty = false;
+}
+
 } // namespace Rml

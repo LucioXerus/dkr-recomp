@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "RmlUi_Renderer_GL3.h"
 #include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/DecorationTypes.h>
@@ -7,10 +35,9 @@
 #include <RmlUi/Core/MeshUtilities.h>
 #include <RmlUi/Core/Platform.h>
 #include <RmlUi/Core/SystemInterface.h>
-#include <algorithm>
 #include <string.h>
 
-#if defined RMLUI_PLATFORM_WIN32_NATIVE
+#if defined(RMLUI_PLATFORM_WIN32) && !defined(__MINGW32__)
 	// function call missing argument list
 	#pragma warning(disable : 4551)
 	// unreferenced local function has been removed
@@ -20,9 +47,6 @@
 #if defined RMLUI_PLATFORM_EMSCRIPTEN
 	#define RMLUI_SHADER_HEADER_VERSION "#version 300 es\nprecision highp float;\n"
 	#include <GLES3/gl3.h>
-#elif defined __ANDROID__
-	#define RMLUI_SHADER_HEADER_VERSION "#version 320 es\nprecision highp float;\n"
-	#include <GLES3/gl32.h>
 #elif defined RMLUI_GL3_CUSTOM_LOADER
 	#define RMLUI_SHADER_HEADER_VERSION "#version 330\n"
 	#include RMLUI_GL3_CUSTOM_LOADER
@@ -33,9 +57,7 @@
 #endif
 
 // Determines the anti-aliasing quality when creating layers. Enables better-looking visuals, especially when transforms are applied.
-#ifndef RMLUI_NUM_MSAA_SAMPLES
-	#define RMLUI_NUM_MSAA_SAMPLES 2
-#endif
+static constexpr int NUM_MSAA_SAMPLES = 2;
 
 #define MAX_NUM_STOPS 16
 #define BLUR_SIZE 7
@@ -458,7 +480,7 @@ struct FramebufferData {
 	bool owns_depth_stencil_buffer;
 };
 
-enum class FramebufferAttachment { None, DepthStencil };
+enum class FramebufferAttachment { None, Depth, DepthStencil };
 
 static void CheckGLError(const char* operation_name)
 {
@@ -593,7 +615,7 @@ static bool CreateProgram(GLuint& out_program, Uniforms& inout_uniform_map, Prog
 static bool CreateFramebuffer(FramebufferData& out_fb, int width, int height, int samples, FramebufferAttachment attachment,
 	GLuint shared_depth_stencil_buffer)
 {
-#if defined(RMLUI_PLATFORM_EMSCRIPTEN) || defined(__ANDROID__)
+#ifdef RMLUI_PLATFORM_EMSCRIPTEN
 	constexpr GLint wrap_mode = GL_CLAMP_TO_EDGE;
 #else
 	constexpr GLint wrap_mode = GL_CLAMP_TO_BORDER; // GL_REPEAT GL_MIRRORED_REPEAT GL_CLAMP_TO_EDGE
@@ -626,7 +648,7 @@ static bool CreateFramebuffer(FramebufferData& out_fb, int width, int height, in
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, min_mag_filter);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_mode);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_mode);
-#if !defined(RMLUI_PLATFORM_EMSCRIPTEN) && !defined(__ANDROID__)
+#ifndef RMLUI_PLATFORM_EMSCRIPTEN
 		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &border_color[0]);
 #endif
 
@@ -648,10 +670,12 @@ static bool CreateFramebuffer(FramebufferData& out_fb, int width, int height, in
 			glGenRenderbuffers(1, &depth_stencil_buffer);
 			glBindRenderbuffer(GL_RENDERBUFFER, depth_stencil_buffer);
 
-			glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
+			const GLenum internal_format = (attachment == FramebufferAttachment::DepthStencil ? GL_DEPTH24_STENCIL8 : GL_DEPTH_COMPONENT24);
+			glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, internal_format, width, height);
 		}
 
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth_stencil_buffer);
+		const GLenum attachment_type = (attachment == FramebufferAttachment::DepthStencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment_type, GL_RENDERBUFFER, depth_stencil_buffer);
 	}
 
 	const GLuint framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -690,27 +714,6 @@ static void DestroyFramebuffer(FramebufferData& fb)
 	if (fb.owns_depth_stencil_buffer && fb.depth_stencil_buffer)
 		glDeleteRenderbuffers(1, &fb.depth_stencil_buffer);
 	fb = {};
-}
-
-static GLuint CreateTexture(Rml::Span<const Rml::byte> source_data, Rml::Vector2i source_dimensions)
-{
-	GLuint texture_id = 0;
-	glGenTextures(1, &texture_id);
-	if (texture_id == 0)
-		return 0;
-
-	glBindTexture(GL_TEXTURE_2D, texture_id);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, source_dimensions.x, source_dimensions.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, source_data.data());
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	return texture_id;
 }
 
 static void BindTexture(const FramebufferData& fb)
@@ -801,12 +804,10 @@ RenderInterface_GL3::~RenderInterface_GL3()
 	}
 }
 
-void RenderInterface_GL3::SetViewport(int width, int height, int offset_x, int offset_y)
+void RenderInterface_GL3::SetViewport(int width, int height)
 {
 	viewport_width = Rml::Math::Max(width, 1);
 	viewport_height = Rml::Math::Max(height, 1);
-	viewport_offset_x = offset_x;
-	viewport_offset_y = offset_y;
 	projection = Rml::Matrix4f::ProjectOrtho(0, (float)viewport_width, (float)viewport_height, 0, -10000, 10000);
 }
 
@@ -869,7 +870,7 @@ void RenderInterface_GL3::BeginFrame()
 	glBlendEquation(GL_FUNC_ADD);
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-#if !defined(RMLUI_PLATFORM_EMSCRIPTEN) && !defined(__ANDROID__)
+#ifndef RMLUI_PLATFORM_EMSCRIPTEN
 	// We do blending in nonlinear sRGB space because that is the common practice and gives results that we are used to.
 	glDisable(GL_FRAMEBUFFER_SRGB);
 #endif
@@ -907,7 +908,6 @@ void RenderInterface_GL3::EndFrame()
 
 	// Draw to backbuffer
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(viewport_offset_x, viewport_offset_y, viewport_width, viewport_height);
 
 	// Assuming we have an opaque background, we can just write to it with the premultiplied alpha blend mode and we'll get the correct result.
 	// Instead, if we had a transparent destination that didn't use premultiplied alpha, we would need to perform a manual un-premultiplication step.
@@ -1064,8 +1064,8 @@ void RenderInterface_GL3::ReleaseGeometry(Rml::CompiledGeometryHandle handle)
 	delete geometry;
 }
 
-/// Flip the vertical axis of the rectangle, and move its origin to the vertically opposite side of the viewport.
-/// @note Changes the coordinate system from RmlUi to OpenGL, or equivalently in reverse.
+/// Flip vertical axis of the rectangle, and move its origin to the vertically opposite side of the viewport.
+/// @note Changes coordinate system from RmlUi to OpenGL, or equivalently in reverse.
 /// @note The Rectangle::Top and Rectangle::Bottom members will have reverse meaning in the returned rectangle.
 static Rml::Rectanglei VerticallyFlipped(Rml::Rectanglei rect, int viewport_height)
 {
@@ -1127,37 +1127,40 @@ void RenderInterface_GL3::RenderToClipMask(Rml::ClipMaskOperation operation, Rml
 	RMLUI_ASSERT(glIsEnabled(GL_STENCIL_TEST));
 	using Rml::ClipMaskOperation;
 
-	GLint stencil_write_value = 1;
-	GLint stencil_test_value = 1;
+	const bool clear_stencil = (operation == ClipMaskOperation::Set || operation == ClipMaskOperation::SetInverse);
+	if (clear_stencil)
+	{
+		// @performance Increment the reference value instead of clearing each time.
+		glClear(GL_STENCIL_BUFFER_BIT);
+	}
+
+	GLint stencil_test_value = 0;
+	glGetIntegerv(GL_STENCIL_REF, &stencil_test_value);
+
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+	glStencilFunc(GL_ALWAYS, GLint(1), GLuint(-1));
+
 	switch (operation)
 	{
 	case ClipMaskOperation::Set:
 	{
-		// @performance Increment the reference value instead of clearing each time.
-		glClear(GL_STENCIL_BUFFER_BIT);
 		glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+		stencil_test_value = 1;
 	}
 	break;
 	case ClipMaskOperation::SetInverse:
 	{
-		glClearStencil(1);
-		glClear(GL_STENCIL_BUFFER_BIT);
-		glClearStencil(0);
 		glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-		stencil_write_value = 0;
+		stencil_test_value = 0;
 	}
 	break;
 	case ClipMaskOperation::Intersect:
 	{
 		glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
-		glGetIntegerv(GL_STENCIL_REF, &stencil_test_value);
 		stencil_test_value += 1;
 	}
 	break;
 	}
-
-	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-	glStencilFunc(GL_ALWAYS, stencil_write_value, GLuint(-1));
 
 	RenderGeometry(geometry, translation, {});
 
@@ -1234,13 +1237,12 @@ Rml::TextureHandle RenderInterface_GL3::LoadTexture(Rml::Vector2i& texture_dimen
 	const byte* image_src = buffer.get() + sizeof(TGAHeader);
 	Rml::UniquePtr<byte[]> image_dest_buffer(new byte[image_size]);
 	byte* image_dest = image_dest_buffer.get();
-	const bool top_to_bottom_order = ((header.imageDescriptor & 32) != 0);
 
-	// Targa is BGR, swap to RGB, flip Y axis as necessary, and convert to premultiplied alpha.
+	// Targa is BGR, swap to RGB, flip Y axis, and convert to premultiplied alpha.
 	for (long y = 0; y < header.height; y++)
 	{
 		long read_index = y * header.width * color_mode;
-		long write_index = top_to_bottom_order ? (y * header.width * 4) : (header.height - y - 1) * header.width * 4;
+		long write_index = ((header.imageDescriptor & 32) != 0) ? read_index : (header.height - y - 1) * header.width * 4;
 		for (long x = 0; x < header.width; x++)
 		{
 			image_dest[write_index] = image_src[read_index + 2];
@@ -1269,14 +1271,25 @@ Rml::TextureHandle RenderInterface_GL3::LoadTexture(Rml::Vector2i& texture_dimen
 
 Rml::TextureHandle RenderInterface_GL3::GenerateTexture(Rml::Span<const Rml::byte> source_data, Rml::Vector2i source_dimensions)
 {
-	RMLUI_ASSERT(source_data.data() && source_data.size() == size_t(source_dimensions.x * source_dimensions.y * 4));
-
-	GLuint texture_id = Gfx::CreateTexture(source_data, source_dimensions);
+	GLuint texture_id = 0;
+	glGenTextures(1, &texture_id);
 	if (texture_id == 0)
 	{
 		Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to generate texture.");
-		return {};
+		return false;
 	}
+
+	glBindTexture(GL_TEXTURE_2D, texture_id);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, source_dimensions.x, source_dimensions.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, source_data.data());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+
 	return (Rml::TextureHandle)texture_id;
 }
 
@@ -1836,7 +1849,7 @@ void RenderInterface_GL3::RenderFilters(Rml::Span<const Rml::CompiledFilterHandl
 			glDisable(GL_BLEND);
 
 			const GLint uniform_location = program_data->uniforms.Get(ProgramId::ColorMatrix, UniformId::ColorMatrix);
-			constexpr bool transpose = std::is_same_v<decltype(filter.color_matrix), Rml::RowMajorMatrix4f>;
+			constexpr bool transpose = std::is_same<decltype(filter.color_matrix), Rml::RowMajorMatrix4f>::value;
 			glUniformMatrix4fv(uniform_location, 1, transpose, filter.color_matrix.data());
 
 			const Gfx::FramebufferData& source = render_layers.GetPostprocessPrimary();
@@ -1937,12 +1950,9 @@ Rml::TextureHandle RenderInterface_GL3::SaveLayerAsTexture()
 	RMLUI_ASSERT(scissor_state.Valid());
 	const Rml::Rectanglei bounds = scissor_state;
 
-	GLuint render_texture = Gfx::CreateTexture({}, bounds.Size());
-	if (render_texture == 0)
-	{
-		Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to create render texture.");
+	Rml::TextureHandle render_texture = GenerateTexture({}, bounds.Size());
+	if (!render_texture)
 		return {};
-	}
 
 	BlitLayerToPostprocessPrimary(render_layers.GetTopLayerHandle());
 
@@ -1962,7 +1972,7 @@ Rml::TextureHandle RenderInterface_GL3::SaveLayerAsTexture()
 		GL_COLOR_BUFFER_BIT, GL_NEAREST                 //
 	);
 
-	glBindTexture(GL_TEXTURE_2D, render_texture);
+	glBindTexture(GL_TEXTURE_2D, (GLuint)render_texture);
 
 	const Gfx::FramebufferData& texture_source = destination;
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, texture_source.framebuffer);
@@ -1972,7 +1982,7 @@ Rml::TextureHandle RenderInterface_GL3::SaveLayerAsTexture()
 	glBindFramebuffer(GL_FRAMEBUFFER, render_layers.GetTopLayer().framebuffer);
 	Gfx::CheckGLError("SaveLayerAsTexture");
 
-	return (Rml::TextureHandle)render_texture;
+	return render_texture;
 }
 
 Rml::CompiledFilterHandle RenderInterface_GL3::SaveLayerAsMaskImage()
@@ -2050,8 +2060,7 @@ Rml::LayerHandle RenderInterface_GL3::RenderLayerStack::PushLayer()
 		GLuint shared_depth_stencil = (fb_layers.empty() ? 0 : fb_layers.front().depth_stencil_buffer);
 
 		fb_layers.push_back(Gfx::FramebufferData{});
-		Gfx::CreateFramebuffer(fb_layers.back(), width, height, RMLUI_NUM_MSAA_SAMPLES, Gfx::FramebufferAttachment::DepthStencil,
-			shared_depth_stencil);
+		Gfx::CreateFramebuffer(fb_layers.back(), width, height, NUM_MSAA_SAMPLES, Gfx::FramebufferAttachment::DepthStencil, shared_depth_stencil);
 	}
 
 	layers_size += 1;
@@ -2129,24 +2138,11 @@ const Gfx::FramebufferData& RenderInterface_GL3::RenderLayerStack::EnsureFramebu
 	return fb;
 }
 
-const Rml::Matrix4f& RenderInterface_GL3::GetTransform() const
-{
-	return transform;
-}
-
-void RenderInterface_GL3::ResetProgram()
-{
-	UseProgram(ProgramId::None);
-}
-
 bool RmlGL3::Initialize(Rml::String* out_message)
 {
-#if defined(RMLUI_PLATFORM_EMSCRIPTEN)
+#if defined RMLUI_PLATFORM_EMSCRIPTEN
 	if (out_message)
 		*out_message = "Started Emscripten WebGL renderer.";
-#elif defined(__ANDROID__)
-	if (out_message)
-		*out_message = "Started OpenGL ES 3 renderer.";
 #elif !defined RMLUI_GL3_CUSTOM_LOADER
 	const int gl_version = gladLoaderLoadGL();
 	if (gl_version == 0)
@@ -2165,7 +2161,7 @@ bool RmlGL3::Initialize(Rml::String* out_message)
 
 void RmlGL3::Shutdown()
 {
-#if !defined(RMLUI_PLATFORM_EMSCRIPTEN) && !defined(__ANDROID__) && !defined(RMLUI_GL3_CUSTOM_LOADER)
+#if !defined RMLUI_PLATFORM_EMSCRIPTEN && !defined RMLUI_GL3_CUSTOM_LOADER
 	gladLoaderUnloadGL();
 #endif
 }

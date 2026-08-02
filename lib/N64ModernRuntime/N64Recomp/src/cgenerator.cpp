@@ -658,3 +658,11 @@ void N64Recomp::CGenerator::process_store_op(const StoreOp& op, const Instructio
             break;
     }
 }
+
+void N64Recomp::CGenerator::emit_function_entry(const std::string& function_name, uint32_t address) const {
+    fmt::print(output_file, "    recomp_enter_function(\"{}\", 0x{:08X});\n", function_name, address);
+}
+
+void N64Recomp::CGenerator::emit_function_exit() const {
+    fmt::print(output_file, "    recomp_exit_function();\n");
+}

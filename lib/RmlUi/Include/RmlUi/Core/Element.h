@@ -1,4 +1,33 @@
-#pragma once
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
+#ifndef RMLUI_CORE_ELEMENT_H
+#define RMLUI_CORE_ELEMENT_H
 
 #include "Box.h"
 #include "Core.h"
@@ -6,7 +35,6 @@
 #include "Header.h"
 #include "ObserverPtr.h"
 #include "Property.h"
-#include "RenderBox.h"
 #include "ScriptInterface.h"
 #include "ScrollTypes.h"
 #include "StyleTypes.h"
@@ -42,6 +70,8 @@ struct StackingContextChild;
 
 /**
     A generic element in the DOM tree.
+
+    @author Peter Curry
  */
 
 class RMLUICORE_API Element : public ScriptInterface, public EnableObserverPtr<Element> {
@@ -128,11 +158,6 @@ public:
 	/// @param[out] offset The offset of the box relative to the element's border box.
 	/// @return The requested box.
 	const Box& GetBox(int index, Vector2f& offset);
-	/// Returns one of the render boxes describing how to generate the geometry for the corresponding element's box.
-	/// @param[in] fill_area The box area that acts as the background, or fill, of the render box.
-	/// @param[in] index The index of the desired box, with 0 being the main box. If outside of bounds, the main render box will be returned.
-	/// @return The requested render box.
-	RenderBox GetRenderBox(BoxArea fill_area = BoxArea::Padding, int index = 0);
 	/// Returns the number of boxes making up this element's geometry.
 	/// @return the number of boxes making up this element's geometry.
 	int GetNumBoxes();
@@ -184,12 +209,10 @@ public:
 	/// @param[in] name The name of the local property definition to remove.
 	void RemoveProperty(const String& name);
 	void RemoveProperty(PropertyId id);
-	/// Returns one of this element's properties. If the property is not defined for this element and not inherited from an ancestor,
-	/// the default value will be returned. Cascading variables ("var()") are fully resolved.
+	/// Returns one of this element's properties. If the property is not defined for this element and not inherited
+	/// from an ancestor, the default value will be returned.
 	/// @param[in] name The name of the property to fetch the value for.
 	/// @return The value of this property for this element, or nullptr if no property exists with the given name.
-	/// @note When resolving any cascading variables ("var()") in the property, correctness is only guaranteed after a context update.
-	/// @lifetime The returned pointer is invalidated on any following call into RmlUi, please copy by value to store the property around.
 	const Property* GetProperty(const String& name);
 	const Property* GetProperty(PropertyId id);
 	/// Returns the values of one of this element's properties.
@@ -197,14 +220,14 @@ public:
 	/// @return The value of this property.
 	template <typename T>
 	T GetProperty(const String& name);
-	/// Returns one of this element's local style properties. Cascading variables ("var()") are not resolved.
+	/// Returns one of this element's properties. If this element is not defined this property, nullptr will be
+	/// returned.
 	/// @param[in] name The name of the property to fetch the value for.
 	/// @return The value of this property for this element, or nullptr if this property has not been explicitly defined for this element.
-	/// @lifetime The returned pointer is invalidated on any following call into RmlUi, please copy by value to store the property around.
 	const Property* GetLocalProperty(const String& name);
 	const Property* GetLocalProperty(PropertyId id);
-	/// Returns the local style properties. Does not include properties applied from any locally set classes.
-	/// @return The local properties for this element.
+	/// Returns the local style properties, excluding any properties from local class.
+	/// @return The local properties for this element, or nullptr if no properties defined
 	const PropertyMap& GetLocalStyleProperties();
 
 	/// Resolves a length to its canonical unit ('px').
@@ -221,13 +244,13 @@ public:
 
 	/// Returns the size of the containing block. Often percentages are scaled relative to this.
 	Vector2f GetContainingBlock();
-	/// Returns 'position' property value from the element's computed values.
+	/// Returns 'position' property value from element's computed values.
 	Style::Position GetPosition();
-	/// Returns 'float' property value from the element's computed values.
+	/// Returns 'float' property value from element's computed values.
 	Style::Float GetFloat();
-	/// Returns 'display' property value from the element's computed values.
+	/// Returns 'display' property value from element's computed values.
 	Style::Display GetDisplay();
-	/// Returns 'line-height' property value from the element's computed values.
+	/// Returns 'line-height' property value from element's computed values.
 	float GetLineHeight();
 
 	/// Project a 2D point in pixel coordinates onto the element's plane.
@@ -241,20 +264,16 @@ public:
 	/// @return True if a new animation was added.
 	bool Animate(const String& property_name, const Property& target_value, float duration, Tween tween = Tween{}, int num_iterations = 1,
 		bool alternate_direction = true, float delay = 0.0f, const Property* start_value = nullptr);
-	bool Animate(PropertyId id, const Property& target_value, float duration, Tween tween = Tween{}, int num_iterations = 1,
-		bool alternate_direction = true, float delay = 0.0f, const Property* start_value = nullptr);
 
 	/// Add a key to an animation, extending its duration.
 	/// If no animation exists for the given property name, the call will be ignored.
 	/// @return True if a new animation key was added.
 	bool AddAnimationKey(const String& property_name, const Property& target_value, float duration, Tween tween = Tween{});
-	bool AddAnimationKey(PropertyId id, const Property& target_value, float duration, Tween tween = Tween{});
 
 	/// Iterator for the local (non-inherited) properties defined on this element.
-	/// @param[in] filter_inherited_by If set, only iterates properties that are inherited by the given element.
 	/// @warning Modifying the element's properties or classes invalidates the iterator.
 	/// @return Iterator to the first property defined on this element.
-	PropertiesIteratorView IterateLocalProperties(Element* filter_inherited_by) const;
+	PropertiesIteratorView IterateLocalProperties() const;
 	///@}
 
 	/** @name Pseudo-classes
@@ -291,7 +310,7 @@ public:
 	Variant* GetAttribute(const String& name);
 	/// Gets the specified attribute.
 	const Variant* GetAttribute(const String& name) const;
-	/// Gets the specified attribute, or the default value.
+	/// Gets the specified attribute, with default value.
 	/// @param[in] name Name of the attribute to retrieve.
 	/// @param[in] default_value Value to return if the attribute doesn't exist.
 	template <typename T>
@@ -340,10 +359,10 @@ public:
 	/// @param[in] id The new id of the element.
 	void SetId(const String& id);
 
-	/// Gets the horizontal offset from the context's left edge to the element's left border edge.
+	/// Gets the horizontal offset from the context's left edge to element's left border edge.
 	/// @return The horizontal offset of the element within its context, in pixels.
 	float GetAbsoluteLeft();
-	/// Gets the vertical offset from the context's top edge to the element's top border edge.
+	/// Gets the vertical offset from the context's top edge to element's top border edge.
 	/// @return The vertical offset of the element within its context, in pixels.
 	float GetAbsoluteTop();
 
@@ -432,7 +451,7 @@ public:
 	/// @return The child element at the given index.
 	Element* GetChild(int index) const;
 	/// Get the current number of children in this element
-	/// @param[in] include_non_dom_elements True if the caller wants to include the non-DOM children. Only set this to true if you know what you're
+	/// @param[in] include_non_dom_elements True if the caller wants to include the non DOM children. Only set this to true if you know what you're
 	/// doing!
 	/// @return The number of children.
 	int GetNumChildren(bool include_non_dom_elements = false) const;
@@ -445,7 +464,7 @@ public:
 	String GetInnerRML() const;
 	/// Sets the markup and content of the element. All existing children will be replaced.
 	/// @param[in] rml The new content of the element.
-	virtual void SetInnerRML(const String& rml);
+	void SetInnerRML(const String& rml);
 
 	//@}
 
@@ -465,7 +484,7 @@ public:
 	/// Adds an event listener to this element.
 	/// @param[in] event Event to attach to.
 	/// @param[in] listener The listener object to be attached.
-	/// @param[in] in_capture_phase True to attach in the capture phase, false in the bubble phase.
+	/// @param[in] in_capture_phase True to attach in the capture phase, false in bubble phase.
 	/// @lifetime The added listener must stay alive until after the dispatched call from EventListener::OnDetach(). This occurs
 	///     e.g. when the element is destroyed or when RemoveEventListener() is called with the same parameters passed here.
 	void AddEventListener(const String& event, EventListener* listener, bool in_capture_phase = false);
@@ -491,7 +510,7 @@ public:
 	bool DispatchEvent(EventId id, const Dictionary& parameters);
 
 	/// Scrolls the parent element's contents so that this element is visible.
-	/// @param[in] options Scroll parameters that control the desired element alignment relative to the parent.
+	/// @param[in] options Scroll parameters that control desired element alignment relative to the parent.
 	void ScrollIntoView(ScrollIntoViewOptions options);
 	/// Scrolls the parent element's contents so that this element is visible.
 	/// @param[in] align_with_top If true, the element will align itself to the top of the parent element's window. If false, the element will be
@@ -500,7 +519,7 @@ public:
 	/// Sets the scroll offset of this element to the given coordinates.
 	/// @param[in] offset The scroll destination coordinates.
 	/// @param[in] behavior Smooth scrolling behavior.
-	/// @note Smooth scrolling can only be applied to a single element at a time, any active smooth scrolls will be canceled.
+	/// @note Smooth scrolling can only be applied to a single element at a time, any active smooth scrolls will be cancelled.
 	void ScrollTo(Vector2f offset, ScrollBehavior behavior = ScrollBehavior::Instant);
 
 	/// Append a child to this element.
@@ -547,14 +566,10 @@ public:
 	/// @param[in] selector The selector or comma-separated selectors to match against.
 	/// @performance Prefer GetElementById/TagName/ClassName whenever possible.
 	void QuerySelectorAll(ElementList& elements, const String& selector);
-	/// Checks if the element matches the given RCSS selector query.
+	/// Check if the element matches the given RCSS selector query.
 	/// @param[in] selector The selector or comma-separated selectors to match against.
 	/// @return True if the element matches the given RCSS selector query, false otherwise.
 	bool Matches(const String& selector);
-	/// Checks if the provided element is a descendant of the current element.
-	/// @param[in] element The element to test with.
-	/// @return True if the provided element is a descendant of this element, false otherwise.
-	bool Contains(Element* element) const;
 
 	//@}
 
@@ -564,7 +579,7 @@ public:
 	//@{
 	/// Access the event dispatcher for this element.
 	EventDispatcher* GetEventDispatcher() const;
-	/// Returns event types with the number of listeners for debugging.
+	/// Returns event types with number of listeners for debugging.
 	String GetEventDispatcherSummary() const;
 	/// Access the element background and border.
 	ElementBackgroundBorder* GetElementBackgroundBorder() const;
@@ -650,7 +665,7 @@ protected:
 	// Dirty the element style definition, including all descendants of the specified nodes.
 	void DirtyDefinition(DirtyNodes dirty_nodes);
 
-	void SetOwnerDocument(ElementDocument* document, bool force_set);
+	void SetOwnerDocument(ElementDocument* document);
 
 	void OnStyleSheetChangeRecursive();
 
@@ -663,7 +678,6 @@ private:
 
 	void DirtyAbsoluteOffset();
 	void DirtyAbsoluteOffsetRecursive();
-	void UpdateAbsoluteOffsetAndRenderBoxData();
 	void UpdateOffset();
 	void SetBaseline(float baseline);
 
@@ -671,7 +685,6 @@ private:
 	void AddChildrenToStackingContext(Vector<StackingContextChild>& stacking_children);
 	void AddToStackingContext(Vector<StackingContextChild>& stacking_children, bool is_flex_item, bool is_non_dom_element);
 	void DirtyStackingContext();
-	Element* ClosestStackingContextContainer();
 
 	void UpdateDefinition();
 
@@ -715,7 +728,6 @@ private:
 
 	bool offset_fixed;
 	bool absolute_offset_dirty;
-	bool rounded_main_padding_size_dirty : 1;
 
 	bool dirty_definition : 1; // Implies dirty child definitions as well.
 	bool dirty_child_definitions : 1;
@@ -758,7 +770,6 @@ private:
 	Vector2f relative_offset_position; // the offset of a relatively positioned element
 
 	Vector2f absolute_offset;
-	Vector2f rounded_main_padding_size;
 
 	// The offset this element adds to its logical children due to scrolling content.
 	Vector2f scroll_offset;
@@ -799,3 +810,5 @@ private:
 } // namespace Rml
 
 #include "Element.inl"
+
+#endif

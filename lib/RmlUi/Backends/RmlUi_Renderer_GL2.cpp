@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "RmlUi_Renderer_GL2.h"
 #include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/FileInterface.h>
@@ -9,6 +37,7 @@
 	#include "RmlUi_Include_Windows.h"
 	#include <gl/Gl.h>
 #elif defined RMLUI_PLATFORM_MACOSX
+	#include <AGL/agl.h>
 	#include <OpenGL/gl.h>
 	#include <OpenGL/glext.h>
 #elif defined RMLUI_PLATFORM_UNIX
@@ -246,13 +275,12 @@ Rml::TextureHandle RenderInterface_GL2::LoadTexture(Rml::Vector2i& texture_dimen
 	const byte* image_src = buffer.get() + sizeof(TGAHeader);
 	Rml::UniquePtr<byte[]> image_dest_buffer(new byte[image_size]);
 	byte* image_dest = image_dest_buffer.get();
-	const bool top_to_bottom_order = ((header.imageDescriptor & 32) != 0);
 
-	// Targa is BGR, swap to RGB, flip Y axis as necessary, and convert to premultiplied alpha.
+	// Targa is BGR, swap to RGB, flip Y axis, and convert to premultiplied alpha.
 	for (long y = 0; y < header.height; y++)
 	{
 		long read_index = y * header.width * color_mode;
-		long write_index = top_to_bottom_order ? (y * header.width * 4) : (header.height - y - 1) * header.width * 4;
+		long write_index = ((header.imageDescriptor & 32) != 0) ? read_index : (header.height - y - 1) * header.width * 4;
 		for (long x = 0; x < header.width; x++)
 		{
 			image_dest[write_index] = image_src[read_index + 2];
@@ -281,8 +309,6 @@ Rml::TextureHandle RenderInterface_GL2::LoadTexture(Rml::Vector2i& texture_dimen
 
 Rml::TextureHandle RenderInterface_GL2::GenerateTexture(Rml::Span<const Rml::byte> source, Rml::Vector2i source_dimensions)
 {
-	RMLUI_ASSERT(source.data() && source.size() == size_t(source_dimensions.x * source_dimensions.y * 4));
-
 	GLuint texture_id = 0;
 	glGenTextures(1, &texture_id);
 	if (texture_id == 0)
@@ -314,9 +340,9 @@ void RenderInterface_GL2::SetTransform(const Rml::Matrix4f* transform)
 
 	if (transform)
 	{
-		if (std::is_same_v<Rml::Matrix4f, Rml::ColumnMajorMatrix4f>)
+		if (std::is_same<Rml::Matrix4f, Rml::ColumnMajorMatrix4f>::value)
 			glLoadMatrixf(transform->data());
-		else if (std::is_same_v<Rml::Matrix4f, Rml::RowMajorMatrix4f>)
+		else if (std::is_same<Rml::Matrix4f, Rml::RowMajorMatrix4f>::value)
 			glLoadMatrixf(transform->Transpose().data());
 	}
 	else

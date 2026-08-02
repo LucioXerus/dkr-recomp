@@ -1,4 +1,33 @@
-#pragma once
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
+#ifndef RMLUI_CORE_CALLBACKTEXTURE_H
+#define RMLUI_CORE_CALLBACKTEXTURE_H
 
 #include "Header.h"
 #include "Types.h"
@@ -11,7 +40,7 @@ class RenderManager;
 class CallbackTextureInterface;
 class Texture;
 
-/**
+/*
     Callback function for generating textures on demand.
     /// @param[in] texture_interface The interface used to specify the texture.
     /// @return True on success.
@@ -21,7 +50,7 @@ using CallbackTextureFunction = Function<bool(const CallbackTextureInterface& te
 /**
     Callback texture is a unique render resource for generating textures on demand.
 
-    Can be constructed through the render manager.
+    It is constructed through the render manager.
  */
 class RMLUICORE_API CallbackTexture final : public UniqueRenderResource<CallbackTexture, StableVectorIndex, StableVectorIndex::Invalid> {
 public:
@@ -37,9 +66,7 @@ private:
 };
 
 /**
-    Interface for generating a texture through the callback texture function.
-
-    The client should submit a texture using one of the Generate/Save/Set functions exactly once during the callback.
+    Interface handed to the texture callback function, which the client can use to submit a single texture.
  */
 class RMLUICORE_API CallbackTextureInterface {
 public:
@@ -55,11 +82,6 @@ public:
 	/// @note The texture will be extracted using the bounds defined by the active scissor region, thereby matching its size.
 	void SaveLayerAsTexture() const;
 
-	/// Manually set the texture directly from a custom texture handle.
-	/// @param[in] handle The handle that represents the texture.
-	/// @param[in] dimensions The width and height of the texture.
-	void SetTextureHandle(TextureHandle handle, Vector2i dimensions) const;
-
 	RenderManager& GetRenderManager() const;
 
 private:
@@ -70,9 +92,7 @@ private:
 };
 
 /**
-    Stores a texture callback function.
-
-    Used to generate and cache callback textures for one or more render managers.
+    Stores a texture callback function, which is used to generate and cache callback textures possibly for multiple render managers.
  */
 class RMLUICORE_API CallbackTextureSource {
 public:
@@ -94,3 +114,4 @@ private:
 };
 
 } // namespace Rml
+#endif

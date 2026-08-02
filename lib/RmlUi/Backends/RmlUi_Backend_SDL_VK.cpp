@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "RmlUi_Backend.h"
 #include "RmlUi_Platform_SDL.h"
 #include "RmlUi_Renderer_VK.h"
@@ -5,15 +33,11 @@
 #include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/FileInterface.h>
 #include <RmlUi/Core/Log.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_vulkan.h>
 
-#if SDL_MAJOR_VERSION == 2 && !(SDL_VIDEO_VULKAN)
+#if !SDL_VIDEO_VULKAN
 	#error "Only the Vulkan SDL backend is supported."
-#endif
-
-#if SDL_MAJOR_VERSION >= 3
-	#include <SDL3/SDL_vulkan.h>
-#else
-	#include <SDL2/SDL_vulkan.h>
 #endif
 
 /**
@@ -22,11 +46,8 @@
     Lifetime governed by the calls to Backend::Initialize() and Backend::Shutdown().
  */
 struct BackendData {
-	BackendData(SDL_Window* window) : system_interface(window) {}
-
 	SystemInterface_SDL system_interface;
 	RenderInterface_VK render_interface;
-	TextInputMethodEditor_SDL text_input_method_editor;
 
 	SDL_Window* window = nullptr;
 
@@ -38,77 +59,27 @@ bool Backend::Initialize(const char* window_name, int width, int height, bool al
 {
 	RMLUI_ASSERT(!data);
 
-#if SDL_MAJOR_VERSION >= 3
-	SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition");
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
-		return false;
-#else
-	SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_TIMER) != 0)
 		return false;
-#endif
 
 	// Submit click events when focusing the window.
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-	// Touch events are handled natively, no need to generate synthetic mouse events for touch devices.
-	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 
-#if defined RMLUI_BACKEND_SIMULATE_TOUCH
-	// Simulate touch events from mouse events for testing touch behavior on a desktop machine.
-	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "1");
-#endif
-
-#if SDL_MAJOR_VERSION >= 3
-	const float window_size_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
-	SDL_PropertiesID props = SDL_CreateProperties();
-	SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, window_name);
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, SDL_WINDOWPOS_CENTERED);
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, SDL_WINDOWPOS_CENTERED);
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, int(width * window_size_scale));
-	SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, int(height * window_size_scale));
-	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
-	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, allow_resize);
-	SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
-	SDL_Window* window = SDL_CreateWindowWithProperties(props);
-	SDL_DestroyProperties(props);
-	auto CreateSurface = [](VkInstance instance, VkSurfaceKHR* out_surface) {
-		return SDL_Vulkan_CreateSurface(data->window, instance, nullptr, out_surface);
-	};
-#else
 	const Uint32 window_flags = (SDL_WINDOW_VULKAN | (allow_resize ? SDL_WINDOW_RESIZABLE : 0));
-	SDL_Window* window = SDL_CreateWindow(window_name, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, window_flags);
-	// SDL2 implicitly activates text input on window creation. Turn it off for now, it will be activated again e.g. when focusing a text input field.
-	SDL_StopTextInput();
-	auto CreateSurface = [](VkInstance instance, VkSurfaceKHR* out_surface) {
-		return (bool)SDL_Vulkan_CreateSurface(data->window, instance, out_surface);
-	};
-#endif
 
+	SDL_Window* window = SDL_CreateWindow(window_name, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, window_flags);
 	if (!window)
 	{
 		Rml::Log::Message(Rml::Log::LT_ERROR, "SDL error on create window: %s", SDL_GetError());
 		return false;
 	}
 
-	data = Rml::MakeUnique<BackendData>(window);
+	data = Rml::MakeUnique<BackendData>();
 	data->window = window;
 
 	Rml::Vector<const char*> extensions;
 	{
 		unsigned int count;
-#if SDL_MAJOR_VERSION >= 3
-		const char* const* extensions_list = SDL_Vulkan_GetInstanceExtensions(&count);
-		if (!extensions_list)
-		{
-			data.reset();
-			Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to get required vulkan extensions");
-			return false;
-		}
-		extensions.resize(count);
-		for (unsigned int i = 0; i < count; i++)
-			extensions[i] = extensions_list[i];
-#else
-
 		if (!SDL_Vulkan_GetInstanceExtensions(window, &count, nullptr))
 		{
 			data.reset();
@@ -122,19 +93,18 @@ bool Backend::Initialize(const char* window_name, int width, int height, bool al
 			Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to get required vulkan extensions");
 			return false;
 		}
-#endif
 	}
 
-	if (!data->render_interface.Initialize(std::move(extensions), CreateSurface))
+	if (!data->render_interface.Initialize(std::move(extensions),
+			[](VkInstance instance, VkSurfaceKHR* out_surface) { return (bool)SDL_Vulkan_CreateSurface(data->window, instance, out_surface); }))
 	{
 		data.reset();
 		Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to initialize Vulkan render interface");
 		return false;
 	}
 
+	data->system_interface.SetWindow(window);
 	data->render_interface.SetViewport(width, height);
-
-	Rml::SetTextInputHandler(&data->text_input_method_editor);
 
 	return true;
 }
@@ -166,12 +136,6 @@ Rml::RenderInterface* Backend::GetRenderInterface()
 
 static bool WaitForValidSwapchain()
 {
-#if SDL_MAJOR_VERSION >= 3
-	constexpr auto event_quit = SDL_EVENT_QUIT;
-#else
-	constexpr auto event_quit = SDL_QUIT;
-#endif
-
 	bool result = true;
 
 	// In some situations the swapchain may become invalid, such as when the window is minimized. In this state the renderer cannot accept any render
@@ -182,7 +146,7 @@ static bool WaitForValidSwapchain()
 		SDL_Event ev;
 		while (SDL_PollEvent(&ev))
 		{
-			if (ev.type == event_quit)
+			if (ev.type == SDL_QUIT)
 			{
 				// Restore the window so that we can recreate the swapchain, and then properly release all resource and shutdown cleanly.
 				SDL_RestoreWindow(data->window);
@@ -200,97 +164,57 @@ bool Backend::ProcessEvents(Rml::Context* context, KeyDownCallback key_down_call
 {
 	RMLUI_ASSERT(data && context);
 
-#if SDL_MAJOR_VERSION >= 3
-	#define RMLSDL_WINDOW_EVENTS_BEGIN
-	#define RMLSDL_WINDOW_EVENTS_END
-	auto GetKey = [](const SDL_Event& event) { return event.key.key; };
-	auto GetDisplayScale = []() { return SDL_GetWindowDisplayScale(data->window); };
-	constexpr auto event_quit = SDL_EVENT_QUIT;
-	constexpr auto event_key_down = SDL_EVENT_KEY_DOWN;
-	constexpr auto event_text_editing = SDL_EVENT_TEXT_EDITING;
-	constexpr auto event_window_size_changed = SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED;
-	bool has_event = false;
-#else
-	#define RMLSDL_WINDOW_EVENTS_BEGIN \
-	case SDL_WINDOWEVENT:              \
-	{                                  \
-		switch (ev.window.event)       \
-		{
-	#define RMLSDL_WINDOW_EVENTS_END \
-		}                            \
-		}                            \
-		break;
-	auto GetKey = [](const SDL_Event& event) { return event.key.keysym.sym; };
-	auto GetDisplayScale = []() { return 1.f; };
-	constexpr auto event_quit = SDL_QUIT;
-	constexpr auto event_key_down = SDL_KEYDOWN;
-	constexpr auto event_text_editing = SDL_TEXTEDITING;
-	constexpr auto event_window_size_changed = SDL_WINDOWEVENT_SIZE_CHANGED;
-	int has_event = 0;
-#endif
-
 	bool result = data->running;
-	data->running = true;
-
 	SDL_Event ev;
+
+	int has_event = 0;
 	if (power_save)
 		has_event = SDL_WaitEventTimeout(&ev, static_cast<int>(Rml::Math::Min(context->GetNextUpdateDelay(), 10.0) * 1000));
 	else
 		has_event = SDL_PollEvent(&ev);
-
 	while (has_event)
 	{
-		bool propagate_event = true;
 		switch (ev.type)
 		{
-		case event_quit:
+		case SDL_QUIT:
 		{
-			propagate_event = false;
 			result = false;
 		}
 		break;
-		case event_key_down:
+		case SDL_KEYDOWN:
 		{
-			propagate_event = false;
-			const Rml::Input::KeyIdentifier key = RmlSDL::ConvertKey(GetKey(ev));
+			const Rml::Input::KeyIdentifier key = RmlSDL::ConvertKey(ev.key.keysym.sym);
 			const int key_modifier = RmlSDL::GetKeyModifierState();
-			const float native_dp_ratio = GetDisplayScale();
+			const float native_dp_ratio = 1.f;
 
 			// See if we have any global shortcuts that take priority over the context.
 			if (key_down_callback && !key_down_callback(context, key, key_modifier, native_dp_ratio, true))
 				break;
 			// Otherwise, hand the event over to the context by calling the input handler as normal.
-			if (!RmlSDL::InputEventHandler(context, data->window, ev))
+			if (!RmlSDL::InputEventHandler(context, ev))
 				break;
 			// The key was not consumed by the context either, try keyboard shortcuts of lower priority.
 			if (key_down_callback && !key_down_callback(context, key, key_modifier, native_dp_ratio, false))
 				break;
 		}
 		break;
-		case event_text_editing:
+		case SDL_WINDOWEVENT:
 		{
-			propagate_event = false;
-			data->text_input_method_editor.HandleEdit(ev.edit);
+			if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
+			{
+				Rml::Vector2i dimensions(ev.window.data1, ev.window.data2);
+				context->SetDimensions(dimensions);
+				data->render_interface.SetViewport(dimensions.x, dimensions.y);
+				break;
+			}
 		}
 		break;
-
-			RMLSDL_WINDOW_EVENTS_BEGIN
-
-		case event_window_size_changed:
+		default:
 		{
-			Rml::Vector2i dimensions = {ev.window.data1, ev.window.data2};
-			data->render_interface.SetViewport(dimensions.x, dimensions.y);
+			RmlSDL::InputEventHandler(context, ev);
 		}
 		break;
-
-			RMLSDL_WINDOW_EVENTS_END
-
-		default: break;
 		}
-
-		if (propagate_event)
-			RmlSDL::InputEventHandler(context, data->window, ev);
-
 		has_event = SDL_PollEvent(&ev);
 	}
 

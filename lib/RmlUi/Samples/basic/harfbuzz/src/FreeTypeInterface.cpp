@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "FreeTypeInterface.h"
 #include <ft2build.h>
 #include <limits.h>
@@ -6,27 +34,14 @@
 #include FT_MULTIPLE_MASTERS_H
 #include FT_TRUETYPE_TABLES_H
 
-namespace FreeType {
-static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Character character, FontGlyphMap& glyphs,
-	const float bitmap_scaling_factor);
+namespace FreeType
+{
+static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Character character, FontGlyphMap& glyphs, const float bitmap_scaling_factor);
 static void BuildGlyphMap(FT_Face ft_face, int size, FontGlyphMap& glyphs, const float bitmap_scaling_factor, const bool load_default_glyphs);
 static void GenerateMetrics(FT_Face ft_face, FontMetrics& metrics, float bitmap_scaling_factor);
 static bool SetFontSize(FT_Face ft_face, int font_size, float& out_bitmap_scaling_factor);
 static void BitmapDownscale(Rml::byte* bitmap_new, const int new_width, const int new_height, const Rml::byte* bitmap_source, const int width,
 	const int height, const int pitch, const Rml::ColorFormat color_format);
-
-#ifdef RMLUI_DEBUG
-#define FT_ERROR_START_LIST     switch ( error_code ) {
-#define FT_ERRORDEF( e, v, s )    case v: return s;
-#define FT_ERROR_END_LIST       }
-// https://freetype.org/freetype2/docs/reference/ft2-error_enumerations.html
-static const char* GetFreeTypeErrorString(FT_Error error_code)
-{
-#undef FTERRORS_H_
-#include "freetype/fterrors.h"
-	return "";
-}
-#endif
 
 bool InitialiseFaceHandle(FontFaceHandleFreetype face, int font_size, FontGlyphMap& glyphs, FontMetrics& metrics, bool load_default_glyphs)
 {
@@ -65,6 +80,32 @@ bool AppendGlyph(FontFaceHandleFreetype face, int font_size, FontGlyphIndex glyp
 	return true;
 }
 
+int GetKerning(FontFaceHandleFreetype face, int font_size, FontGlyphIndex lhs, FontGlyphIndex rhs)
+{
+	FT_Face ft_face = (FT_Face)face;
+
+	RMLUI_ASSERT(FT_HAS_KERNING(ft_face));
+
+	// Set face size again in case it was used at another size in another font face handle.
+	// Font size value of zero assumes it is already set.
+	if (font_size > 0)
+	{
+		float bitmap_scaling_factor = 1.0f;
+		if (!SetFontSize(ft_face, font_size, bitmap_scaling_factor) || bitmap_scaling_factor != 1.0f)
+			return 0;
+	}
+
+	FT_Vector ft_kerning;
+
+	FT_Error ft_error = FT_Get_Kerning(ft_face, lhs, rhs,FT_KERNING_DEFAULT, &ft_kerning);
+
+	if (ft_error)
+		return 0;
+
+	int kerning = ft_kerning.x >> 6;
+	return kerning;
+}
+
 FontGlyphIndex GetGlyphIndexFromCharacter(FontFaceHandleFreetype face, Character character)
 {
 	return FT_Get_Char_Index((FT_Face)face, (FT_ULong)character);
@@ -79,28 +120,18 @@ static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Charac
 	FT_Error error = FT_Load_Glyph(ft_face, glyph_index, FT_LOAD_COLOR);
 	if (error != 0)
 	{
-#ifdef RMLUI_DEBUG
-		auto error_message = GetFreeTypeErrorString(error);
-		Rml::Log::Message(Rml::Log::LT_WARNING, "Unable to load glyph at index '%u' in font face '%s %s'; FreeType error 0x%x: %s.",
-			(unsigned int)glyph_index, ft_face->family_name, ft_face->style_name, error, error_message);
-#else
-		Rml::Log::Message(Rml::Log::LT_WARNING, "Unable to load glyph at index '%u' in font face '%s %s'; FreeType error 0x%x.",
-			(unsigned int)glyph_index, ft_face->family_name, ft_face->style_name, error);
-#endif
+		Rml::Log::Message(Rml::Log::LT_WARNING, "Unable to load glyph at index '%u' on the font face '%s %s'; error code: %d.",
+			(unsigned int)glyph_index,
+			ft_face->family_name, ft_face->style_name, error);
 		return false;
 	}
 
 	error = FT_Render_Glyph(ft_face->glyph, FT_RENDER_MODE_NORMAL);
 	if (error != 0)
 	{
-#ifdef RMLUI_DEBUG
-		auto error_message = GetFreeTypeErrorString(error);
-		Rml::Log::Message(Rml::Log::LT_WARNING, "Unable to render glyph at index '%u' in font face '%s %s'; FreeType error 0x%x: %s.",
-			(unsigned int)glyph_index, ft_face->family_name, ft_face->style_name, error, error_message);
-#else
-		Rml::Log::Message(Rml::Log::LT_WARNING, "Unable to render glyph at index '%u' in font face '%s %s'; FreeType error 0x%x.",
-			(unsigned int)glyph_index, ft_face->family_name, ft_face->style_name, error);
-#endif
+		Rml::Log::Message(Rml::Log::LT_WARNING, "Unable to render glyph at index '%u' on the font face '%s %s'; error code: %d.",
+			(unsigned int)glyph_index,
+			ft_face->family_name, ft_face->style_name, error);
 		return false;
 	}
 
@@ -116,9 +147,18 @@ static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Charac
 
 	FT_GlyphSlot ft_glyph = ft_face->glyph;
 
-	glyph.bearing.x = ft_glyph->bitmap_left;
-	glyph.bearing.y = ft_glyph->bitmap_top;
+	// Set the glyph's dimensions.
+	glyph.dimensions.x = ft_glyph->metrics.width >> 6;
+	glyph.dimensions.y = ft_glyph->metrics.height >> 6;
+
+	// Set the glyph's bearing.
+	glyph.bearing.x = ft_glyph->metrics.horiBearingX >> 6;
+	glyph.bearing.y = ft_glyph->metrics.horiBearingY >> 6;
+
+	// Set the glyph's advance.
 	glyph.advance = ft_glyph->metrics.horiAdvance >> 6;
+
+	// Set the glyph's bitmap dimensions.
 	glyph.bitmap_dimensions.x = ft_glyph->bitmap.width;
 	glyph.bitmap_dimensions.y = ft_glyph->bitmap.rows;
 
@@ -126,6 +166,7 @@ static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Charac
 	const bool scale_bitmap = (bitmap_scaling_factor < 1.f);
 	if (scale_bitmap)
 	{
+		glyph.dimensions = Rml::Vector2i(Rml::Vector2f(glyph.dimensions) * bitmap_scaling_factor);
 		glyph.bearing = Rml::Vector2i(Rml::Vector2f(glyph.bearing) * bitmap_scaling_factor);
 		glyph.advance = int(float(glyph.advance) * bitmap_scaling_factor);
 		glyph.bitmap_dimensions = Rml::Vector2i(Rml::Vector2f(glyph.bitmap_dimensions) * bitmap_scaling_factor);
@@ -209,18 +250,28 @@ static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Charac
 
 				if (glyph.color_format == Rml::ColorFormat::RGBA8)
 				{
-					// Swizzle channels (BGRA -> RGBA)
+					// Swizzle channels (BGRA -> RGBA) and un-premultiply alpha.
 					destination_bitmap = glyph.bitmap_owned_data.get();
 
 					for (int k = 0; k < glyph.bitmap_dimensions.x * glyph.bitmap_dimensions.y * num_bytes_per_pixel; k += 4)
 					{
-						std::swap(destination_bitmap[k], destination_bitmap[k + 2]);
-#ifdef RMLUI_DEBUG
+						Rml::byte b = destination_bitmap[k];
+						Rml::byte g = destination_bitmap[k + 1];
+						Rml::byte r = destination_bitmap[k + 2];
 						const Rml::byte alpha = destination_bitmap[k + 3];
-						for (int c = 0; c < 3; c++)
-							RMLUI_ASSERTMSG(destination_bitmap[k + c] <= alpha,
-								"Glyph data is assumed to be encoded in premultiplied alpha, but that is not the case.");
-#endif
+						RMLUI_ASSERTMSG(b <= alpha && g <= alpha && r <= alpha, "Assumption of glyph data being premultiplied is broken.");
+
+						if (alpha > 0 && alpha < 255)
+						{
+							b = Rml::byte((b * 255) / alpha);
+							g = Rml::byte((g * 255) / alpha);
+							r = Rml::byte((r * 255) / alpha);
+						}
+
+						destination_bitmap[k] = r;
+						destination_bitmap[k + 1] = g;
+						destination_bitmap[k + 2] = b;
+						destination_bitmap[k + 3] = alpha;
 					}
 				}
 			}
@@ -255,9 +306,10 @@ static void BuildGlyphMap(FT_Face ft_face, int size, FontGlyphMap& glyphs, const
 	if (it == glyphs.end())
 	{
 		Rml::FontGlyph glyph;
-		glyph.bitmap_dimensions = {size / 3, (size * 2) / 3};
-		glyph.advance = glyph.bitmap_dimensions.x + 2;
-		glyph.bearing = {1, glyph.bitmap_dimensions.y};
+		glyph.dimensions = {size / 3, (size * 2) / 3};
+		glyph.bitmap_dimensions = glyph.dimensions;
+		glyph.advance = glyph.dimensions.x + 2;
+		glyph.bearing = {1, glyph.dimensions.y};
 
 		glyph.bitmap_owned_data.reset(new Rml::byte[glyph.bitmap_dimensions.x * glyph.bitmap_dimensions.y]);
 		glyph.bitmap_data = glyph.bitmap_owned_data.get();
@@ -294,9 +346,6 @@ static void GenerateMetrics(FT_Face ft_face, FontMetrics& metrics, float bitmap_
 		metrics.x_height = ft_face->glyph->metrics.height * bitmap_scaling_factor / float(1 << 6);
 	else
 		metrics.x_height = 0.5f * metrics.line_spacing;
-
-	FT_UInt ellipsis_index = FT_Get_Char_Index(ft_face, 0x2026);
-	metrics.has_ellipsis = (ellipsis_index != 0);
 }
 
 static bool SetFontSize(FT_Face ft_face, int font_size, float& out_bitmap_scaling_factor)

@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../Common/TestsShell.h"
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/DataModelHandle.h>
@@ -10,7 +38,7 @@ using namespace Rml;
 
 namespace {
 
-static const String data_binding_rml = R"(
+static const String document_rml = R"(
 <rml>
 <head>
 	<title>Test</title>
@@ -51,10 +79,8 @@ static const String data_binding_rml = R"(
 <p>{{ s3.val }}</p>
 <p>{{ s4.val }}</p>
 <p>{{ s5.val }}</p>
-<p id="simple">{{ simple }}</p>
-<p id="simple_custom">{{ simple_custom }}</p>
-<p id="scoped">{{ scoped }}</p>
-<p id="scoped_custom">{{ scoped_custom }}</p>
+<p>{{ simple }}</p>
+<p>{{ scoped }}</p>
 
 <h1>Basic</h1>
 <p>{{ basic.a }}</p>
@@ -184,11 +210,7 @@ struct StringWrap {
 
 enum SimpleEnum { Simple_Zero = 0, Simple_One, Simple_Two };
 
-enum SimpleEnumCustom { Simple_Zero_Custom, Simple_One_Custom, Simple_Two_Custom };
-
 enum class ScopedEnum : uint64_t { Zero = 0, One, Two };
-
-enum class ScopedEnumCustom { Zero, One, Two };
 
 struct Globals {
 	int i0 = 0;
@@ -197,9 +219,7 @@ struct Globals {
 	SharedPtr<int> i3 = MakeShared<int>(3);
 
 	SimpleEnum simple = Simple_One;
-	SimpleEnumCustom simple_custom = Simple_One_Custom;
 	ScopedEnum scoped = ScopedEnum::One;
-	ScopedEnumCustom scoped_custom = ScopedEnumCustom::One;
 
 	String s0 = "s0";
 	String* s1 = new String("s1");
@@ -334,9 +354,9 @@ struct Arrays {
 
 DataModelHandle model_handle;
 
-bool InitializeDataBindings(Context* context, bool allow_missing_variables = false)
+bool InitializeDataBindings(Context* context)
 {
-	Rml::DataModelConstructor constructor = context->CreateDataModel("basics", nullptr, allow_missing_variables);
+	Rml::DataModelConstructor constructor = context->CreateDataModel("basics");
 	if (!constructor)
 		return false;
 
@@ -350,84 +370,6 @@ bool InitializeDataBindings(Context* context, bool allow_missing_variables = fal
 	{
 		handle.RegisterMember("val", &StringWrap::val);
 	}
-
-	constructor.RegisterScalar<SimpleEnumCustom>(
-		[](const SimpleEnumCustom& value, Rml::Variant& variant) {
-			if (value == Simple_Zero_Custom)
-			{
-				variant = "Zero";
-			}
-			else if (value == Simple_One_Custom)
-			{
-				variant = "One";
-			}
-			else if (value == Simple_Two_Custom)
-			{
-				variant = "Two";
-			}
-			else
-			{
-				Rml::Log::Message(Rml::Log::LT_ERROR, "Invalid value for SimpleEnumCustom type.");
-			}
-		},
-		[](SimpleEnumCustom& value, const Rml::Variant& variant) {
-			Rml::String str = variant.Get<Rml::String>();
-			if (str == "Zero")
-			{
-				value = Simple_Zero_Custom;
-			}
-			else if (str == "One")
-			{
-				value = Simple_One_Custom;
-			}
-			else if (str == "Two")
-			{
-				value = Simple_Two_Custom;
-			}
-			else
-			{
-				Rml::Log::Message(Rml::Log::LT_ERROR, "Can't convert '%s' to SimpleEnumCustom.", str.c_str());
-			}
-		});
-
-	constructor.RegisterScalar<ScopedEnumCustom>(
-		[](const ScopedEnumCustom& value, Rml::Variant& variant) {
-			if (value == ScopedEnumCustom::Zero)
-			{
-				variant = "Zero";
-			}
-			else if (value == ScopedEnumCustom::One)
-			{
-				variant = "One";
-			}
-			else if (value == ScopedEnumCustom::Two)
-			{
-				variant = "Two";
-			}
-			else
-			{
-				Rml::Log::Message(Rml::Log::LT_ERROR, "Invalid value for ScopedEnumCustom type.");
-			}
-		},
-		[](ScopedEnumCustom& value, const Rml::Variant& variant) {
-			Rml::String str = variant.Get<Rml::String>();
-			if (str == "Zero")
-			{
-				value = ScopedEnumCustom::Zero;
-			}
-			else if (str == "One")
-			{
-				value = ScopedEnumCustom::One;
-			}
-			else if (str == "Two")
-			{
-				value = ScopedEnumCustom::Two;
-			}
-			else
-			{
-				Rml::Log::Message(Rml::Log::LT_ERROR, "Can't convert '%s' to ScopedEnumCustom.", str.c_str());
-			}
-		});
 
 	{
 		// Globals
@@ -444,9 +386,7 @@ bool InitializeDataBindings(Context* context, bool allow_missing_variables = fal
 		constructor.Bind("s5", &globals.s5);
 
 		constructor.Bind("simple", &globals.simple);
-		constructor.Bind("simple_custom", &globals.simple_custom);
 		constructor.Bind("scoped", &globals.scoped);
-		constructor.Bind("scoped_custom", &globals.scoped_custom);
 		// Invalid: Each of the following should give a compile-time failure.
 		// constructor.Bind("x0", &globals.x0);
 		// constructor.Bind("x1", &globals.x1);
@@ -534,32 +474,13 @@ TEST_CASE("data_binding")
 	Context* context = TestsShell::GetContext();
 	REQUIRE(context);
 
-	bool allow_missing_variables = false;
-	SUBCASE("default") {}
-	SUBCASE("allow_missing_variables")
-	{
-		allow_missing_variables = true;
-	}
+	REQUIRE(InitializeDataBindings(context));
 
-	REQUIRE(InitializeDataBindings(context, allow_missing_variables));
-
-	ElementDocument* document = context->LoadDocumentFromMemory(data_binding_rml);
+	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
 	REQUIRE(document);
 	document->Show();
 
 	TestsShell::RenderLoop();
-
-	Element* element = document->GetElementById("simple");
-	CHECK(element->GetInnerRML() == "1");
-
-	element = document->GetElementById("simple_custom");
-	CHECK(element->GetInnerRML() == "One");
-
-	element = document->GetElementById("scoped");
-	CHECK(element->GetInnerRML() == "1");
-
-	element = document->GetElementById("scoped_custom");
-	CHECK(element->GetInnerRML() == "One");
 
 	document->Close();
 
@@ -571,14 +492,7 @@ TEST_CASE("data_binding.inside_string")
 	Context* context = TestsShell::GetContext();
 	REQUIRE(context);
 
-	bool allow_missing_variables = false;
-	SUBCASE("default") {}
-	SUBCASE("allow_missing_variables")
-	{
-		allow_missing_variables = true;
-	}
-
-	REQUIRE(InitializeDataBindings(context, allow_missing_variables));
+	REQUIRE(InitializeDataBindings(context));
 
 	ElementDocument* document = context->LoadDocumentFromMemory(inside_string_rml);
 	REQUIRE(document);
@@ -598,14 +512,7 @@ TEST_CASE("data_binding.aliasing")
 	Context* context = TestsShell::GetContext();
 	REQUIRE(context);
 
-	bool allow_missing_variables = false;
-	SUBCASE("default") {}
-	SUBCASE("allow_missing_variables")
-	{
-		allow_missing_variables = true;
-	}
-
-	REQUIRE(InitializeDataBindings(context, allow_missing_variables));
+	REQUIRE(InitializeDataBindings(context));
 
 	ElementDocument* document = context->LoadDocumentFromMemory(aliasing_rml);
 	REQUIRE(document);
@@ -656,146 +563,6 @@ TEST_CASE("data_binding.dynamic_variables")
 	TestsShell::ShutdownShell();
 }
 
-TEST_CASE("data_binding.allow_missing_variables")
-{
-	Context* context = TestsShell::GetContext();
-	REQUIRE(context);
-
-	static const String document_rml = R"(
-<rml>
-<head>
-	<title>Test</title>
-	<link type="text/template" href="/assets/window.rml"/>
-</head>
-<body template="window" data-model="late">
-<p id="bound">{{ greeting }}</p>
-<p id="unbound">{{ missing }}</p>
-<p id="aliased" data-alias-alt="greeting">{{ alt }}</p>
-<p id="set_bound" data-event-click="greeting = 'clicked'">click</p>
-<p id="set_missing" data-event-click="missing = 'clicked'">click</p>
-<input id="input" type="text" data-value="greeting"/>
-<input id="input_missing" type="text" data-value="missing"/>
-</body>
-</rml>
-)";
-
-	Rml::DataModelConstructor constructor = context->CreateDataModel("late", nullptr, true);
-	REQUIRE(constructor);
-
-	Rml::String greeting = "hi";
-	constructor.Bind("greeting", &greeting);
-	DataModelHandle handle = constructor.GetModelHandle();
-
-	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
-	REQUIRE(document);
-	document->Show();
-
-	TestsShell::RenderLoop();
-
-	CHECK(document->GetElementById("bound")->GetInnerRML() == "hi");
-	CHECK(document->GetElementById("unbound")->GetInnerRML() == "");
-	CHECK(document->GetElementById("aliased")->GetInnerRML() == "hi");
-	CHECK(document->GetElementById("input")->GetAttribute<String>("value", "") == "hi");
-
-	// data-event-click assignment to a bound variable.
-	document->GetElementById("set_bound")->DispatchEvent(EventId::Click, Dictionary());
-	TestsShell::RenderLoop();
-
-	CHECK(greeting == "clicked");
-	CHECK(document->GetElementById("bound")->GetInnerRML() == "clicked");
-	CHECK(document->GetElementById("aliased")->GetInnerRML() == "clicked");
-
-	// TODO: Test data-event-click assignment to a missing variable.
-	//       Currently triggers RMLUI_ERROR in the expression evaluator.
-	// document->GetElementById("set_missing")->DispatchEvent(EventId::Click, Dictionary());
-	// TestsShell::RenderLoop();
-	// CHECK(document->GetElementById("unbound")->GetInnerRML() == "");
-
-	// DirtyVariable on a bound variable propagates the update.
-	greeting = "dirty";
-	handle.DirtyVariable("greeting");
-	TestsShell::RenderLoop();
-
-	CHECK(document->GetElementById("bound")->GetInnerRML() == "dirty");
-	CHECK(document->GetElementById("aliased")->GetInnerRML() == "dirty");
-
-	// DirtyVariable on a missing variable is silently ignored.
-	handle.DirtyVariable("missing");
-	TestsShell::RenderLoop();
-	CHECK(document->GetElementById("unbound")->GetInnerRML() == "");
-
-	// Writing via data-value input updates the bound variable.
-	document->GetElementById("input")->Focus();
-	context->ProcessTextInput("world ");
-	TestsShell::RenderLoop();
-
-	CHECK(greeting == "world dirty");
-	CHECK(document->GetElementById("bound")->GetInnerRML() == "world dirty");
-	CHECK(document->GetElementById("aliased")->GetInnerRML() == "world dirty");
-
-	Rml::String late_bound;
-	SUBCASE("late_bind_before_input")
-	{
-		// Late-bind a previously missing variable, then dirty it.
-		late_bound = "resolved";
-		constructor.Bind("missing", &late_bound);
-		handle.DirtyVariable("missing");
-		TestsShell::RenderLoop();
-
-		CHECK(document->GetElementById("unbound")->GetInnerRML() == "resolved");
-
-		// data-event-click assignment now works on the late-bound variable.
-		document->GetElementById("set_missing")->DispatchEvent(EventId::Click, Dictionary());
-		TestsShell::RenderLoop();
-
-		CHECK(late_bound == "clicked");
-		CHECK(document->GetElementById("unbound")->GetInnerRML() == "clicked");
-
-		// Writing via data-value input now updates the late-bound variable.
-		document->GetElementById("input_missing")->Focus();
-		context->ProcessTextInput("test ");
-		TestsShell::RenderLoop();
-
-		CHECK(late_bound == "test clicked");
-		CHECK(document->GetElementById("unbound")->GetInnerRML() == "test clicked");
-	}
-	SUBCASE("late_bind_after_input")
-	{
-		// Writing via data-value input to a missing variable is silently ignored.
-		document->GetElementById("input_missing")->Focus();
-		context->ProcessTextInput("test");
-		TestsShell::RenderLoop();
-		CHECK(document->GetElementById("unbound")->GetInnerRML() == "");
-
-		// Late-bind a previously missing variable, then dirty it.
-		late_bound = "resolved";
-		constructor.Bind("missing", &late_bound);
-		handle.DirtyVariable("missing");
-		TestsShell::RenderLoop();
-
-		CHECK(document->GetElementById("unbound")->GetInnerRML() == "resolved");
-
-		// data-event-click assignment now works on the late-bound variable.
-		document->GetElementById("set_missing")->DispatchEvent(EventId::Click, Dictionary());
-		TestsShell::RenderLoop();
-
-		CHECK(late_bound == "clicked");
-		CHECK(document->GetElementById("unbound")->GetInnerRML() == "clicked");
-
-		// The earlier input left a stale cursor in the widget. Text is inserted
-		// at the wrong position.
-		document->GetElementById("input_missing")->Focus();
-		context->ProcessTextInput("test ");
-		TestsShell::RenderLoop();
-
-		CHECK(late_bound == "clictest ked");
-		CHECK(document->GetElementById("unbound")->GetInnerRML() == "clictest ked");
-	}
-
-	document->Close();
-	TestsShell::ShutdownShell();
-}
-
 static const String set_enum_rml = R"(
 <rml>
 <head>
@@ -839,151 +606,6 @@ TEST_CASE("data_binding.set_enum")
 
 	CHECK(globals.simple == Simple_Two);
 	CHECK(element->GetInnerRML() == "2");
-
-	document->Close();
-	TestsShell::ShutdownShell();
-}
-
-static const String data_model_on_body_rml = R"(
-<rml>
-<head>
-	<title>Test</title>
-	<link type="text/rcss" href="/assets/rml.rcss"/>
-	<link type="text/rcss" href="/assets/invader.rcss"/>
-	<link type="text/template" href="/assets/window.rml"/>
-	<style>
-		body {
-			width: 500px;
-			height: 400px;
-			background: #ccc;
-			color: #333;
-		}
-	</style>
-</head>
-<body BODY_ATTRIBUTE>
-	<div DIV_ATTRIBUTE>
-		<div id="simple">{{ simple }}</div>
-		<div id="s2_val">{{ s2.val }}</div>
-		<div id="array_size">{{ arrays.a.size }}</div>
-		<div id="array_empty" data-attr-empty="arrays.a.size == 0"></div>
-		<div data-for="value, i : arrays.a">{{ i }}: {{ value }}</div>
-	</div>
-</body>
-</rml>
-)";
-
-TEST_CASE("data_binding.data_model_on_body")
-{
-	Context* context = TestsShell::GetContext();
-	REQUIRE(context);
-
-	REQUIRE(InitializeDataBindings(context));
-
-	const String data_model_attribute = R"( data-model="basics")";
-	const String template_attribute = R"( template="window")";
-
-	String document_rml;
-	SUBCASE("data_model_on_div")
-	{
-		document_rml = StringUtilities::Replace(data_model_on_body_rml, "BODY_ATTRIBUTE", "");
-		document_rml = StringUtilities::Replace(document_rml, "DIV_ATTRIBUTE", data_model_attribute);
-	}
-	SUBCASE("data_model_on_body")
-	{
-		document_rml = StringUtilities::Replace(data_model_on_body_rml, "BODY_ATTRIBUTE", data_model_attribute);
-		document_rml = StringUtilities::Replace(document_rml, "DIV_ATTRIBUTE", "");
-	}
-	SUBCASE("data_model_on_body_with_template")
-	{
-		document_rml = StringUtilities::Replace(data_model_on_body_rml, "BODY_ATTRIBUTE", data_model_attribute + template_attribute);
-		document_rml = StringUtilities::Replace(document_rml, "DIV_ATTRIBUTE", "");
-	}
-
-	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
-	REQUIRE(document);
-	document->Show();
-
-	TestsShell::RenderLoop();
-
-	CHECK(document->GetElementById("simple")->GetInnerRML() == Rml::ToString(int(globals.simple)));
-	CHECK(document->GetElementById("s2_val")->GetInnerRML() == globals.s2.val);
-
-	const Vector<int> array = Arrays{}.a;
-	CHECK(document->GetElementById("array_size")->GetInnerRML() == Rml::ToString(array.size()));
-	CHECK(document->GetElementById("array_empty")->GetAttribute<bool>("empty", true) == array.empty());
-
-	Element* element = document->GetElementById("array_empty")->GetNextSibling();
-	size_t i = 0;
-	for (; i < array.size() && element; ++i)
-	{
-		CHECK(element->GetInnerRML() == Rml::CreateString("%zu: %d", i, array[i]));
-		element = element->GetNextSibling();
-	}
-	CHECK(i == array.size());
-
-	document->Close();
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("data_binding.data-value")
-{
-	Context* context = TestsShell::GetContext();
-	REQUIRE(context);
-
-	static const String document_rml = R"(
-<rml>
-<head>
-	<title>Test</title>
-	<link type="text/template" href="/assets/window.rml"/>
-</head>
-<body template="window" data-model="text">
-<div id="div" data-value="parent">
-	<p id="p">{{ name }}</p>
-	<input id="input" type="text" data-value="name"/>
-</div>
-</body>
-</rml>
-)";
-
-	Rml::DataModelConstructor constructor = context->CreateDataModel("text");
-	REQUIRE(constructor);
-
-	Rml::String name = "name";
-	Rml::String parent = "parent";
-
-	constructor.Bind("name", &name);
-	constructor.Bind("parent", &parent);
-
-	DataModelHandle handle = constructor.GetModelHandle();
-
-	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
-	REQUIRE(document);
-	document->Show();
-
-	TestsShell::RenderLoop();
-
-	Element* div = document->GetElementById("div");
-	Element* p = document->GetElementById("p");
-	Element* input = document->GetElementById("input");
-
-	REQUIRE(p->GetInnerRML() == "name");
-	REQUIRE(input->GetAttribute<String>("value", "") == "name");
-	REQUIRE(div->GetAttribute<String>("value", "") == "parent");
-
-	name = "ant";
-	handle.DirtyVariable("name");
-	TestsShell::RenderLoop();
-	REQUIRE(p->GetInnerRML() == "ant");
-	REQUIRE(input->GetAttribute<String>("value", "") == "ant");
-	REQUIRE(div->GetAttribute<String>("value", "") == "parent");
-
-	input->Focus();
-	context->ProcessTextInput("cheerful ");
-	TestsShell::RenderLoop();
-	REQUIRE(name == "cheerful ant");
-	REQUIRE(p->GetInnerRML() == "cheerful ant");
-	REQUIRE(input->GetAttribute<String>("value", "") == "cheerful ant");
-	REQUIRE(div->GetAttribute<String>("value", "") == "parent");
 
 	document->Close();
 	TestsShell::ShutdownShell();

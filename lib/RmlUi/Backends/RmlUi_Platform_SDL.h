@@ -1,22 +1,46 @@
-#pragma once
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
+#ifndef RMLUI_BACKENDS_PLATFORM_SDL_H
+#define RMLUI_BACKENDS_PLATFORM_SDL_H
 
 #include <RmlUi/Core/Input.h>
 #include <RmlUi/Core/SystemInterface.h>
-#include <RmlUi/Core/TextInputHandler.h>
 #include <RmlUi/Core/Types.h>
-
-#if RMLUI_SDL_VERSION_MAJOR == 3
-	#include <SDL3/SDL.h>
-#elif RMLUI_SDL_VERSION_MAJOR == 2
-	#include <SDL.h>
-#else
-	#error "Unspecified RMLUI_SDL_VERSION_MAJOR. Please set this definition to the major version of the SDL library being linked to."
-#endif
+#include <SDL.h>
 
 class SystemInterface_SDL : public Rml::SystemInterface {
 public:
-	SystemInterface_SDL(SDL_Window* window);
+	SystemInterface_SDL();
 	~SystemInterface_SDL();
+
+	// Optionally, provide or change the window to be used for setting the mouse cursors.
+	void SetWindow(SDL_Window* window);
 
 	// -- Inherited from Rml::SystemInterface  --
 
@@ -26,9 +50,6 @@ public:
 
 	void SetClipboardText(const Rml::String& text) override;
 	void GetClipboardText(Rml::String& text) override;
-
-	void ActivateKeyboard(Rml::Vector2f caret_position, float line_height) override;
-	void DeactivateKeyboard() override;
 
 private:
 	SDL_Window* window = nullptr;
@@ -45,13 +66,8 @@ private:
 namespace RmlSDL {
 
 // Applies input on the context based on the given SDL event.
-// 
-// Note (SDL3 + SDL_Renderer): When using SDL_SetRenderLogicalPresentation(), SDL_Renderer operates in render
-// coordinates (logical coordinates). Therefore, before passing an SDL_Event to InputEventHandler, input event
-// coordinates (mouse/touch/etc.) should be converted to render coordinates, e.g.
-// SDL_ConvertEventToRenderCoordinates(renderer, &ev).
 // @return True if the event is still propagating, false if it was handled by the context.
-bool InputEventHandler(Rml::Context* context, SDL_Window* window, SDL_Event& ev);
+bool InputEventHandler(Rml::Context* context, SDL_Event& ev);
 
 // Converts the SDL key to RmlUi key.
 Rml::Input::KeyIdentifier ConvertKey(int sdl_key);
@@ -64,15 +80,4 @@ int GetKeyModifierState();
 
 } // namespace RmlSDL
 
-class TextInputMethodEditor_SDL final : public Rml::TextInputHandler {
-public:
-	void OnActivate(Rml::TextInputContext* input_context) override;
-	void OnDeactivate(Rml::TextInputContext* input_context) override;
-	void OnDestroy(Rml::TextInputContext* input_context) override;
-
-	void HandleEdit(const SDL_TextEditingEvent& ev);
-
-private:
-	Rml::TextInputContext* context = nullptr;
-	int start = 0, end = 0;
-};
+#endif

@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../Common/TestsInterface.h"
 #include "../Common/TestsShell.h"
 #include "../Common/TypesToString.h"
@@ -177,87 +205,20 @@ TEST_CASE("animation.decorator")
 
 			"horizontal-gradient(horizontal #7f7f7f3f #7f7f7f3f), horizontal-gradient(horizontal #7f7f7f3f #7f7f7f3f)",
 		},
-
-		// Standard declaration of linear gradients (consider string conversion a best-effort for now)
-		{
-			"",
-			"",
-
-			"linear-gradient(transparent, transparent)",
-			"linear-gradient(white, white)",
-
-			"linear-gradient(180deg unspecified unspecified unspecified #7d7d7d3f, #7d7d7d3f)",
-		},
-		{
-			"",
-			"",
-
-			"linear-gradient(0deg, transparent, transparent)",
-			"linear-gradient(180deg, white, white)",
-
-			"linear-gradient(45deg unspecified unspecified unspecified #7d7d7d3f, #7d7d7d3f)",
-		},
-		{
-			"",
-			"",
-
-			"linear-gradient(105deg, #000000 0%, #ff0000 100%)",
-			"linear-gradient(105deg, #ffffff 20%, #00ff00 60%)",
-
-			"linear-gradient(105deg unspecified unspecified unspecified #7f7f7f 5%, #dc7f00 90%)",
-		},
-		{
-			"",
-			"",
-
-			"linear-gradient(105deg, #000000 0%, #ff0000 50%, #ff00ff 100%)",
-			"linear-gradient(105deg, #ffffff 0%, #ffffff 10%, #ffffff 100%)",
-
-			"linear-gradient(105deg unspecified unspecified unspecified #7f7f7f 0%, #ff7f7f 40%, #ff7fff 100%)",
-		},
-		{
-			"",
-			"",
-
-			"linear-gradient(to right, transparent, transparent)",
-			"linear-gradient(270deg, transparent, transparent)",
-
-			// We don't really handle mixing direction keywords and angles here, the output will not be what one might expect.
-			"linear-gradient(202.5deg to right unspecified #00000000, #00000000)",
-		},
-		{
-			"",
-			"",
-
-			"linear-gradient(to right, transparent, transparent)",
-			"linear-gradient(to left, transparent, transparent)",
-
-			// This will effectively evaluate to "to right" with angle being ignored, resulting in discrete interpolation. Not ideal.
-			"linear-gradient(180deg to right unspecified #00000000, #00000000)",
-		},
-		{
-			"",
-			"",
-
-			"linear-gradient(#000000 0%, #ffffff 100%)",
-			"repeating-linear-gradient(#000000 0%, #ffffff 100%)",
-
-			"linear-gradient(#000000 0%, #ffffff 100%)",
-		},
 	};
 
 	TestsSystemInterface* system_interface = TestsShell::GetTestsSystemInterface();
 	Context* context = TestsShell::GetContext();
 
-	for (const String property_str : {"decorator", "mask-image"})
+	for (const char* property_str : {"decorator", "mask-image"})
 	{
 		for (const Test& test : tests)
 		{
 			const double t_final = 0.1;
 
-			system_interface->SetManualTime(0.0);
-			String document_rml = Rml::CreateString(document_decorator_rml.c_str(), test.from_rule.c_str(), test.to_rule.c_str(),
-				property_str.c_str(), test.from.c_str(), property_str.c_str(), test.to.c_str());
+			system_interface->SetTime(0.0);
+			String document_rml = Rml::CreateString(document_decorator_rml.c_str(), test.from_rule.c_str(), test.to_rule.c_str(), property_str,
+				test.from.c_str(), property_str, test.to.c_str());
 
 			ElementDocument* document = context->LoadDocumentFromMemory(document_rml, "assets/");
 			Element* element = document->GetChild(0);
@@ -265,17 +226,15 @@ TEST_CASE("animation.decorator")
 			document->Show();
 			TestsShell::RenderLoop();
 
-			system_interface->SetManualTime(0.25 * t_final);
+			system_interface->SetTime(0.25 * t_final);
 			TestsShell::RenderLoop();
-
-			CAPTURE(property_str);
-			CAPTURE(test.from);
-			CAPTURE(test.to);
-			CHECK(element->GetProperty<String>(property_str) == test.expected_25p);
+			CHECK_MESSAGE(element->GetProperty<String>(property_str) == test.expected_25p, property_str, " from: ", test.from, ", to: ", test.to);
 
 			document->Close();
 		}
 	}
+
+	system_interface->SetTime(0.0);
 
 	TestsShell::ShutdownShell();
 }
@@ -383,7 +342,7 @@ TEST_CASE("animation.filter")
 		{
 			const double t_final = 0.1;
 
-			system_interface->SetManualTime(0.0);
+			system_interface->SetTime(0.0);
 			String document_rml = Rml::CreateString(document_filter_rml.c_str(), property_str, test.from.c_str(), property_str, test.to.c_str());
 
 			ElementDocument* document = context->LoadDocumentFromMemory(document_rml, "assets/");
@@ -391,7 +350,7 @@ TEST_CASE("animation.filter")
 
 			document->Show();
 
-			system_interface->SetManualTime(0.25 * t_final);
+			system_interface->SetTime(0.25 * t_final);
 			TestsShell::RenderLoop();
 
 			CHECK_MESSAGE(element->GetProperty<String>(property_str) == test.expected_25p, property_str, " from: ", test.from, ", to: ", test.to);
@@ -400,180 +359,7 @@ TEST_CASE("animation.filter")
 		}
 	}
 
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("animation.case_sensitivity")
-{
-	static const String document_rml_template = R"(
-<rml>
-<head>
-	<title>Test</title>
-	<link type="text/rcss" href="/assets/rml.rcss"/>
-	<style>
-		body {
-			left: 0;
-			top: 0;
-			right: 0;
-			bottom: 0;
-		}
-		@keyframes %s {
-			to { visibility: visible; }
-		}
-		div {
-			width: 300dp;
-			height: 300dp;
-			visibility: hidden;
-			background-color: #666;
-			animation: 1.5s %s;
-		}
-	</style>
-</head>
-
-<body>
-	<div/>
-</body>
-</rml>
-)";
-
-	TestsSystemInterface* system_interface = TestsShell::GetTestsSystemInterface();
-	Context* context = TestsShell::GetContext();
-
-	struct TestCase {
-		String keyframe_name;
-		String animation_name;
-		bool expected_visible_end;
-	};
-
-	const Vector<TestCase> test_cases = {
-		// TODO: Make name-lookups case sensitive:
-		{"mix", "Mix", false},
-		{"Mix", "mix", false},
-
-		{"show", "show", true},
-		{"Show", "Show", true},
-	};
-
-	for (const auto& test_case : test_cases)
-	{
-		system_interface->SetManualTime(0.0);
-		INFO("@keyframes: ", test_case.keyframe_name);
-		INFO("animation: ", test_case.animation_name);
-
-		const String document_rml = CreateString(document_rml_template.c_str(), test_case.keyframe_name.c_str(), test_case.animation_name.c_str());
-		ElementDocument* document = context->LoadDocumentFromMemory(document_rml, "assets/");
-		Element* element = document->GetChild(0);
-		document->Show();
-		REQUIRE(element->IsVisible() == false);
-
-		constexpr double t_end = 1.0;
-		constexpr double dt = 0.1;
-		double t = 0;
-		while (t < t_end)
-		{
-			t += dt;
-			system_interface->SetManualTime(t);
-			context->Update();
-		}
-
-		CHECK(element->IsVisible() == test_case.expected_visible_end);
-
-		document->Close();
-	}
-
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("animation.case_sensitive_distinct_keyframes")
-{
-	static const String document_rml = R"(
-<rml>
-<head>
-	<title>Test</title>
-	<link type="text/rcss" href="/assets/rml.rcss"/>
-	<style>
-		body {
-			left: 0;
-			top: 0;
-			right: 0;
-			bottom: 0;
-		}
-		@keyframes show {
-			50%, 100% { opacity: 0.25; }
-		}
-		@keyframes Show {
-			50%, 100% { opacity: 0.5; }
-		}
-		@keyframes SHOW {
-			0%, 25% { opacity: 0.75; }
-			75%, 100% { opacity: 1.0; }
-		}
-		div {
-			width: 300dp;
-			height: 300dp;
-			opacity: 0.0;
-			background-color: #666;
-		}
-		.show-lower {
-			animation: 2s show;
-		}
-		.show-upper {
-			animation: 2s Show;
-		}
-		.show-infinite {
-			animation: 0.5s infinite alternate SHOW;
-		}
-		.show-infinite-upper-keywords {
-			animation: 0.5s INFINITE ALTERNATE SHOW;
-		}
-	</style>
-</head>
-
-<body>
-	<div/>
-</body>
-</rml>
-)";
-
-	TestsSystemInterface* system_interface = TestsShell::GetTestsSystemInterface();
-	Context* context = TestsShell::GetContext();
-
-	struct TestCase {
-		String class_name;
-		float expected_opacity_end;
-	};
-
-	const Vector<TestCase> test_cases = {
-		{"show-lower", 0.25f},
-		{"show-upper", 0.5f},
-		{"show-infinite", 0.75f},
-		{"show-infinite-upper-keywords", 0.75f},
-	};
-
-	for (const auto& test_case : test_cases)
-	{
-		INFO("Class name: ", test_case.class_name);
-		system_interface->SetManualTime(0.0);
-		ElementDocument* document = context->LoadDocumentFromMemory(document_rml, "assets/");
-		Element* element = document->GetChild(0);
-		element->SetClass(test_case.class_name, true);
-		document->Show();
-		REQUIRE(element->GetProperty<float>("opacity") == 0.f);
-
-		constexpr double t_end = 1.0;
-		constexpr double dt = 0.1;
-		double t = 0;
-		while (t < t_end)
-		{
-			t += dt;
-			system_interface->SetManualTime(t);
-			context->Update();
-		}
-
-		CHECK(element->GetProperty<float>("opacity") == test_case.expected_opacity_end);
-
-		document->Close();
-	}
+	system_interface->SetTime(0.0);
 
 	TestsShell::ShutdownShell();
 }
@@ -648,7 +434,7 @@ TEST_CASE("animation.multiple_values")
 	};
 
 	{
-		system_interface->SetManualTime(0.0);
+		system_interface->SetTime(0.0);
 		ElementDocument* document = context->LoadDocumentFromMemory(document_multiple_values_rml, "assets/");
 		Element* element = document->GetChild(0);
 
@@ -661,7 +447,7 @@ TEST_CASE("animation.multiple_values")
 			while (t < test.time)
 			{
 				t = Math::Min(t + dt, test.time);
-				system_interface->SetManualTime(t);
+				system_interface->SetTime(t);
 				context->Update();
 			}
 
@@ -673,6 +459,7 @@ TEST_CASE("animation.multiple_values")
 		document->Close();
 	}
 
+	system_interface->SetTime(0.0);
 	TestsShell::ShutdownShell();
 }
 
@@ -763,7 +550,7 @@ TEST_CASE("animation.multiple_overlapping")
 	{
 		system_interface->SetNumExpectedWarnings(2);
 
-		system_interface->SetManualTime(0.0);
+		system_interface->SetTime(0.0);
 
 		ElementDocument* document = context->LoadDocumentFromMemory(document_animation_multiple_values_rml, "assets/");
 		Element* element = document->GetChild(0);
@@ -778,7 +565,7 @@ TEST_CASE("animation.multiple_overlapping")
 			while (t < test.time)
 			{
 				t = Math::Min(t + dt, test.time);
-				system_interface->SetManualTime(t);
+				system_interface->SetTime(t);
 				context->Update();
 			}
 
@@ -790,203 +577,6 @@ TEST_CASE("animation.multiple_overlapping")
 		document->Close();
 	}
 
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("transition.display_and_visibility")
-{
-	// Display and visibility properties have special behavior that make them visible throughout the interpolation duration.
-	const String document_rml_template = R"(
-<rml>
-<head>
-	<title>Test</title>
-	<link type="text/rcss" href="/assets/rml.rcss"/>
-	<style>
-		body {
-			inset: 0;
-		}
-		div {
-			background-color: #c66;
-			width: 300dp;
-			height: 300dp;
-			margin: auto;
-			transition: opacity display visibility 1s;
-		}
-		.hide {
-			%s;
-			opacity: 0;
-		}
-	</style>
-</head>
-
-<body>
-	<div class="hide" id="div"/>
-</body>
-</rml>
-)";
-
-	TestsSystemInterface* system_interface = TestsShell::GetTestsSystemInterface();
-	Context* context = TestsShell::GetContext();
-
-	String document_rml;
-
-	SUBCASE("display: none")
-	{
-		document_rml = CreateString(document_rml_template.c_str(), "display: none");
-	}
-	SUBCASE("visibility")
-	{
-		document_rml = CreateString(document_rml_template.c_str(), "visibility: hidden");
-	}
-
-	const double dt = 1.0 / 60.0;
-	const double t_delta = 0.1;
-	const double t_fadein0 = 1;
-	const double t_fadein1 = 2;
-	const double t_fadeout0 = 4;
-	const double t_fadeout1 = 5;
-
-	enum class Action { None, Show, Hide };
-
-	struct TestCase {
-		double time;
-		float opacity;
-		bool is_visible;
-		Action action = Action::None;
-	};
-	const std::vector<TestCase> tests = {
-		{t_fadein0 - t_delta, 0.f, false},
-		{t_fadein0, 0.f, false, Action::Show},
-		{t_fadein0 + t_delta, 0.1f, true},
-		{t_fadein1 - t_delta, 0.9f, true},
-		{t_fadein1, 1.f, true},
-		{t_fadein1 + t_delta, 1.f, true},
-		{t_fadeout0 - t_delta, 1.f, true},
-		{t_fadeout0, 1.f, true, Action::Hide},
-		{t_fadeout0 + t_delta, 0.9f, true},
-		{t_fadeout1 - t_delta, 0.1f, true},
-		{t_fadeout1 + dt, 0.f, false}, // Due to floating-point precision, the animation may end slightly after the exact endtime.
-		{t_fadeout1 + t_delta, 0.f, false},
-	};
-
-	{
-		system_interface->SetManualTime(0.0);
-
-		ElementDocument* document = context->LoadDocumentFromMemory(document_rml, "assets/");
-		Element* element = document->GetChild(0);
-
-		document->Show();
-
-		double t = 0.f;
-		for (const auto& test : tests)
-		{
-			while (t < test.time)
-			{
-				t = Math::Min(t + dt, test.time);
-				system_interface->SetManualTime(t);
-				TestsShell::RenderLoop(false);
-			}
-
-			if (test.action == Action::Show)
-				element->SetClass("hide", false);
-			else if (test.action == Action::Hide)
-				element->SetClass("hide", true);
-
-			context->Update();
-
-			INFO("Time: ", test.time);
-			CHECK(element->GetProperty<float>("opacity") == doctest::Approx(test.opacity));
-			CHECK(element->IsVisible() == test.is_visible);
-		}
-
-		document->Close();
-	}
-
-	TestsShell::ShutdownShell();
-}
-
-TEST_CASE("animation.transform_interpolation")
-{
-	static const String document_rml_template = R"(
-<rml>
-<head>
-	<title>Test</title>
-	<link type="text/rcss" href="/assets/rml.rcss"/>
-	<style>
-		body { inset: 0; }
-		@keyframes move {
-			from { transform: %s; }
-			to   { transform: %s; }
-		}
-		div {
-			width: 64px;
-			height: 64px;
-			animation: move 0.1s;
-		}
-	</style>
-</head>
-
-<body>
-	<div/>
-</body>
-</rml>
-)";
-
-	struct Test {
-		String from;
-		String to;
-		String expected_midpoint;
-	};
-
-	const Vector<Test> tests{
-		{
-			"translate(0px, 50px)",
-			"translate3d(-600px, -200px, -200px) rotate3d(1, 0, 0, 60deg) skewX(-10deg)",
-			"translate3d(-300px, -75px, -100px) rotate3d(1, 0, 0, 30deg) skewX(-5deg)",
-		},
-		{
-			"translate3d(-600px, -200px, -200px) rotate3d(1, 0, 0, 60deg) skewX(-10deg)",
-			"translate(0px, 50px)",
-			"translate3d(-300px, -75px, -100px) rotate3d(1, 0, 0, 30deg) skewX(-5deg)",
-		},
-		{
-			"none",
-			"rotate3d(0, 1, 0, 60deg)",
-			"rotate3d(0, 1, 0, 30deg)",
-		},
-		{
-			"scale(3)",
-			"scale(1) rotate3d(3, 4, 0, 90deg)",
-			"scale(2, 2) rotate3d(0.6, 0.8, 0, 45deg)",
-		},
-	};
-
-	TestsSystemInterface* system_interface = TestsShell::GetTestsSystemInterface();
-	Context* context = TestsShell::GetContext();
-
-	for (const Test& test : tests)
-	{
-		const double t_final = 0.1;
-
-		system_interface->SetManualTime(0.0);
-		const String document_rml = CreateString(document_rml_template.c_str(), test.from.c_str(), test.to.c_str());
-
-		ElementDocument* document = context->LoadDocumentFromMemory(document_rml, "assets/");
-		document->Show();
-
-		system_interface->SetManualTime(0.5 * t_final);
-		context->Update();
-
-		Element* element = document->GetChild(0);
-		String transform_str = element->GetProperty<String>("transform");
-		CAPTURE(test.from);
-		CAPTURE(test.to);
-		CAPTURE(transform_str);
-		CHECK(transform_str.find("decomposedMatrix3d") == String::npos);
-		CHECK(transform_str == test.expected_midpoint);
-
-		document->Close();
-	}
-
+	system_interface->SetTime(0.0);
 	TestsShell::ShutdownShell();
 }

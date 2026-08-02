@@ -98,6 +98,7 @@ add_library(N64RecompElf)
 
 target_sources(N64RecompElf PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/elf.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mdebug.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/symbol_lists.cpp
 )
 
@@ -164,6 +165,17 @@ target_sources(OfflineModRecomp PRIVATE
 )
 
 target_link_libraries(OfflineModRecomp fmt rabbitizer tomlplusplus::tomlplusplus N64Recomp)
+
+# Mod combiner
+project(RecompModMerger)
+add_executable(RecompModMerger)
+
+target_sources(RecompModMerger PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/RecompModMerger/main.cpp
+)
+
+target_link_libraries(RecompModMerger N64Recomp)
 
 # Live recompiler
 project(LiveRecomp)

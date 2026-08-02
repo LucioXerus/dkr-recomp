@@ -1,4 +1,33 @@
-#pragma once
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
+#ifndef RMLUIOBSERVERPTR_H
+#define RMLUIOBSERVERPTR_H
 
 #include "Header.h"
 #include <type_traits>
@@ -6,16 +35,12 @@
 
 namespace Rml {
 
-namespace Detail {
-	struct RMLUICORE_API ObserverPtrBlock {
-		int num_observers;
-		void* pointed_to_object;
-	};
-	RMLUICORE_API ObserverPtrBlock* AllocateObserverPtrBlock();
-	RMLUICORE_API void DeallocateObserverPtrBlockIfEmpty(ObserverPtrBlock* block);
-	void InitializeObserverPtrPool();
-	void ShutdownObserverPtrPool();
-} // namespace Detail
+struct RMLUICORE_API ObserverPtrBlock {
+	int num_observers;
+	void* pointed_to_object;
+};
+RMLUICORE_API ObserverPtrBlock* AllocateObserverPtrBlock();
+RMLUICORE_API void DeallocateObserverPtrBlockIfEmpty(ObserverPtrBlock* block);
 
 template <typename T>
 class EnableObserverPtr;
@@ -92,7 +117,7 @@ public:
 		if (block)
 		{
 			block->num_observers -= 1;
-			Detail::DeallocateObserverPtrBlockIfEmpty(block);
+			DeallocateObserverPtrBlockIfEmpty(block);
 			block = nullptr;
 		}
 	}
@@ -100,13 +125,13 @@ public:
 private:
 	friend class Rml::EnableObserverPtr<T>;
 
-	explicit ObserverPtr(Detail::ObserverPtrBlock* block) noexcept : block(block)
+	explicit ObserverPtr(ObserverPtrBlock* block) noexcept : block(block)
 	{
 		if (block)
 			block->num_observers += 1;
 	}
 
-	Detail::ObserverPtrBlock* block;
+	ObserverPtrBlock* block;
 };
 
 template <typename T>
@@ -126,7 +151,7 @@ protected:
 		if (block)
 		{
 			block->pointed_to_object = nullptr;
-			Detail::DeallocateObserverPtrBlockIfEmpty(block);
+			DeallocateObserverPtrBlockIfEmpty(block);
 		}
 	}
 
@@ -155,13 +180,14 @@ private:
 	{
 		if (!block)
 		{
-			block = Detail::AllocateObserverPtrBlock();
+			block = AllocateObserverPtrBlock();
 			block->num_observers = 0;
 			block->pointed_to_object = static_cast<void*>(static_cast<T*>(this));
 		}
 	}
 
-	Detail::ObserverPtrBlock* block = nullptr;
+	ObserverPtrBlock* block = nullptr;
 };
 
 } // namespace Rml
+#endif

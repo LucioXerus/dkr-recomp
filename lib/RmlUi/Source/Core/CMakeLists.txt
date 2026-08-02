@@ -4,9 +4,6 @@
 add_library(rmlui_core
 	BaseXMLParser.cpp
 	Box.cpp
-	BoxShadowCache.h
-	BoxShadowCache.cpp
-	BoxShadowHash.h
 	CallbackTexture.cpp
 	Clock.cpp
 	Clock.h
@@ -18,7 +15,6 @@ add_library(rmlui_core
 	ContextInstancer.cpp
 	ContextInstancerDefault.cpp
 	ContextInstancerDefault.h
-	ControlledLifetimeResource.h
 	ConvolutionFilter.cpp
 	Core.cpp
 	DataController.cpp
@@ -43,8 +39,6 @@ add_library(rmlui_core
 	DecoratorNinePatch.h
 	DecoratorShader.cpp
 	DecoratorShader.h
-	DecoratorText.cpp
-	DecoratorText.h
 	DecoratorTiled.cpp
 	DecoratorTiled.h
 	DecoratorTiledBox.cpp
@@ -55,8 +49,6 @@ add_library(rmlui_core
 	DecoratorTiledImage.h
 	DecoratorTiledVertical.cpp
 	DecoratorTiledVertical.h
-	DecoratorUtilities.cpp
-	DecoratorUtilities.h
 	DocumentHeader.cpp
 	DocumentHeader.h
 	EffectSpecification.cpp
@@ -73,8 +65,6 @@ add_library(rmlui_core
 	ElementHandle.cpp
 	ElementHandle.h
 	ElementInstancer.cpp
-	ElementMeta.cpp
-	ElementMeta.h
 	ElementScroll.cpp
 	ElementStyle.cpp
 	ElementStyle.h
@@ -202,7 +192,6 @@ add_library(rmlui_core
 	TextureLayoutRow.h
 	TextureLayoutTexture.cpp
 	TextureLayoutTexture.h
-	Traits.cpp
 	Transform.cpp
 	TransformPrimitive.cpp
 	TransformState.cpp
@@ -308,7 +297,6 @@ target_sources(rmlui_core PRIVATE
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/Core/PropertyParser.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/Core/PropertySpecification.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/Core/Rectangle.h"
-	"${PROJECT_SOURCE_DIR}/Include/RmlUi/Core/RenderBox.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/Core/RenderInterface.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/Core/RenderInterfaceCompatibility.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/Core/RenderManager.h"

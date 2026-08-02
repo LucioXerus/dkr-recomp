@@ -107,7 +107,7 @@ N64Recomp::LiveGeneratorOutput N64Recomp::LiveGenerator::finish() {
 
     // Generate the switch error jump targets and assign the jump labels.
     if (!context->switch_error_jumps.empty()) {
-        // Allocate the function name and place it in the literals.
+// Allocate the function name and place it in the literals.
         char* func_name = new char[context->function_name.size() + 1];
         memcpy(func_name, context->function_name.c_str(), context->function_name.size());
         func_name[context->function_name.size()] = '\x00';
@@ -1946,6 +1946,21 @@ void N64Recomp::LiveGenerator::emit_trigger_event(uint32_t event_index) const {
 void N64Recomp::LiveGenerator::emit_comment(const std::string& comment) const {
     (void)comment;
     // Nothing to do here.
+}
+
+void N64Recomp::LiveGenerator::emit_function_entry(const std::string& function_name, uint32_t address) const {
+    // TODO: figure out how to get the function name into the live recompiler
+    // Load the arguments (function name, vram)
+    sljit_emit_op1(compiler, SLJIT_MOV, SLJIT_R0, 0, SLJIT_IMM, sljit_sw(nullptr));
+    sljit_emit_op1(compiler, SLJIT_MOV32, SLJIT_R1, 0, SLJIT_IMM, sljit_sw(address));
+    
+    // Call recomp_enter_function.
+    sljit_emit_icall(compiler, SLJIT_CALL, SLJIT_ARGS2V(P, 32), SLJIT_IMM, sljit_sw(recomp_enter_function));
+}
+
+void N64Recomp::LiveGenerator::emit_function_exit() const {
+    // Call recomp_exit_function.
+    sljit_emit_icall(compiler, SLJIT_CALL, SLJIT_ARGS0V(), SLJIT_IMM, sljit_sw(recomp_exit_function));
 }
 
 bool N64Recomp::recompile_function_live(LiveGenerator& generator, const Context& context, size_t function_index, std::ostream& output_file, std::span<std::vector<uint32_t>> static_funcs_out, bool tag_reference_relocs) {

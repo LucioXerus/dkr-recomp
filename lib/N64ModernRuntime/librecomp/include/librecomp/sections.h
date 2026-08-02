@@ -1,8 +1,8 @@
 #ifndef __SECTIONS_H__
 #define __SECTIONS_H__
 
-#include <stdint.h>
 #include <optional>
+#include <stdint.h>
 #include "recomp.h"
 
 #define ARRLEN(x) (sizeof(x) / sizeof((x)[0]))

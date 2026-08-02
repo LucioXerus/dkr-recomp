@@ -666,7 +666,14 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
                         std::ostringstream mod_error_stream;
                         mod_error_stream << "Error loading mods:\n\n";
                         for (const auto& cur_error : mod_load_errors) {
-                            mod_error_stream << cur_error.mod_id.c_str() << ": " << recomp::mods::error_to_string(cur_error.error);
+                            auto mod_details = recomp::mods::get_details_for_mod(cur_error.mod_id);
+                            if (mod_details) {
+                                mod_error_stream << mod_details->display_name;
+                            }
+                            else {
+                                mod_error_stream << cur_error.mod_id.c_str();
+                            }
+                            mod_error_stream << ": " << recomp::mods::error_to_string(cur_error.error);
                             if (!cur_error.error_param.empty()) {
                                 mod_error_stream << " (" << cur_error.error_param.c_str() << ")";
                             }
@@ -722,31 +729,20 @@ bool recomp::flashram_allowed() {
         save_type == SaveType::AllowAll;
 }
 
-void recomp::start(
-    const recomp::Version& version,
-    ultramodern::renderer::WindowHandle window_handle,
-    const recomp::rsp::callbacks_t& rsp_callbacks,
-    const ultramodern::renderer::callbacks_t& renderer_callbacks,
-    const ultramodern::audio_callbacks_t& audio_callbacks,
-    const ultramodern::input::callbacks_t& input_callbacks,
-    const ultramodern::gfx_callbacks_t& gfx_callbacks_,
-    const ultramodern::events::callbacks_t& events_callbacks,
-    const ultramodern::error_handling::callbacks_t& error_handling_callbacks,
-    const ultramodern::threads::callbacks_t& threads_callbacks
-) {
-    project_version = version;
+void recomp::start(const recomp::Configuration& cfg) {
+    project_version = cfg.project_version;
     recomp::check_all_stored_roms();
 
-    recomp::rsp::set_callbacks(rsp_callbacks);
+    recomp::rsp::set_callbacks(cfg.rsp_callbacks);
 
     static const ultramodern::rsp::callbacks_t ultramodern_rsp_callbacks {
         .init = recomp::rsp::constants_init,
         .run_task = recomp::rsp::run_task,
     };
 
-    ultramodern::set_callbacks(ultramodern_rsp_callbacks, renderer_callbacks, audio_callbacks, input_callbacks, gfx_callbacks_, events_callbacks, error_handling_callbacks, threads_callbacks);
+    ultramodern::set_callbacks(ultramodern_rsp_callbacks, cfg.renderer_callbacks, cfg.audio_callbacks, cfg.input_callbacks, cfg.gfx_callbacks, cfg.events_callbacks, cfg.error_handling_callbacks, cfg.threads_callbacks);
 
-    ultramodern::gfx_callbacks_t gfx_callbacks = gfx_callbacks_;
+    ultramodern::gfx_callbacks_t gfx_callbacks = cfg.gfx_callbacks;
 
     ultramodern::gfx_callbacks_t::gfx_data_t gfx_data{};
 
@@ -754,6 +750,7 @@ void recomp::start(
         gfx_data = gfx_callbacks.create_gfx();
     }
 
+    auto window_handle = cfg.window_handle;
     if (window_handle == ultramodern::renderer::WindowHandle{}) {
         if (gfx_callbacks.create_window) {
             window_handle = gfx_callbacks.create_window(gfx_data);
@@ -762,6 +759,8 @@ void recomp::start(
             assert(false && "No create_window callback provided");
         }
     }
+
+    ultramodern::set_message_queue_control(cfg.message_queue_control);
 
     recomp::mods::initialize_mods();
     recomp::mods::scan_mods();

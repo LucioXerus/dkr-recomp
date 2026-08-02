@@ -40,8 +40,8 @@
 
 #include <limits>
 #include <algorithm>
-#include <cstdint>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <functional>
 #include <memory> // only to support hash of smart pointers

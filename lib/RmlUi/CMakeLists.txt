@@ -3,12 +3,12 @@
 cmake_minimum_required(VERSION 3.10...3.27)
 
 project("RmlUi"
-	VERSION "6.3"
+	VERSION "6.0"
 	DESCRIPTION "C++ user interface library based on the HTML and CSS standards"
 	LANGUAGES "C" "CXX"
 )
 
-set(RMLUI_VERSION_RELEASE FALSE)
+set(RMLUI_VERSION_RELEASE TRUE)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
 	set(RMLUI_IS_ROOT_PROJECT TRUE)
@@ -24,8 +24,6 @@ option(BUILD_SHARED_LIBS "CMake standard option. Choose whether to build shared 
 #   - Do not include negations (such as "not" and "disable"), to avoid situations with double negation.
 #   - Do not include a verb prefix (such as "enable" and "build"), as these are often superfluous.
 option(RMLUI_SAMPLES "Build samples of the library." OFF)
-option(RMLUI_BACKEND_SIMULATE_TOUCH "Simulate touch events with mouse events" OFF)
-option(RMLUI_IME_SAMPLE_USE_NOTO_FONTS "Enable Noto fonts as fallback for Asian languages in IME sample. Downloads the fonts at build time." OFF)
 set(RMLUI_BACKEND "auto" CACHE STRING "Backend to use when building the RmlUi samples. Choose one from ./CMake/OptionsLists.cmake.")
 set_property(CACHE RMLUI_BACKEND PROPERTY STRINGS ${RMLUI_BACKEND_OPTIONS})
 if(NOT RMLUI_BACKEND IN_LIST RMLUI_BACKEND_OPTIONS)
@@ -121,7 +119,7 @@ include("CMake/Utilities.cmake")
 include("CMake/Dependencies.cmake")
 
 include("CMake/RuntimeUtilities.cmake")
-setup_binary_output_directories()
+setup_runtime_output_directory()
 setup_runtime_dependency_set_arg()
 
 add_subdirectory("Source")
@@ -176,6 +174,8 @@ configure_file(
 	"${CMAKE_CURRENT_BINARY_DIR}/install/RmlUiConfig.cmake"
 	@ONLY
 )
+# RMLUI_CMAKE_MINIMUM_VERSION_RAISE_NOTICE:
+# From CMake 3.11 use compatibility mode `SameMinorVersion`.
 write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/install/RmlUiConfigVersion.cmake"
 	COMPATIBILITY ExactVersion
 )

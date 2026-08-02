@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "../include/PlatformExtensions.h"
 #include <RmlUi/Core/Log.h>
 #include <RmlUi/Core/Platform.h>
@@ -17,11 +45,10 @@
 #elif defined RMLUI_PLATFORM_UNIX
 
 	#include <X11/Xlib.h>
-	#include <dirent.h>
-	#include <stdlib.h>
-	#include <string.h>
-	#include <sys/stat.h>
 	#include <unistd.h>
+	#include <sys/stat.h>
+	#include <dirent.h>
+	#include <string.h>
 
 #endif
 
@@ -30,8 +57,7 @@ Rml::String PlatformExtensions::FindSamplesRoot()
 #ifdef RMLUI_PLATFORM_WIN32
 	// Test various relative paths to the "Samples" directory, based on common build and install locations.
 	const char* candidate_paths[] = {
-		".\\",
-		"Samples\\",
+		"",
 		"..\\Samples\\",
 		"..\\share\\Samples\\",
 		"..\\..\\Samples\\",
@@ -39,44 +65,30 @@ Rml::String PlatformExtensions::FindSamplesRoot()
 		"..\\..\\..\\..\\Samples\\",
 	};
 
-	char path_buffer[MAX_PATH];
+	// Fetch the path of the executable, test the candidate paths appended to that.
+	char executable_file_name[MAX_PATH];
+	if (GetModuleFileNameA(NULL, executable_file_name, MAX_PATH) >= MAX_PATH && GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+	{
+		executable_file_name[0] = 0;
+	}
 
-	// Fetch the path of the executable.
-	if (GetModuleFileNameA(NULL, path_buffer, MAX_PATH) >= MAX_PATH && GetLastError() == ERROR_INSUFFICIENT_BUFFER)
-		return {};
-	Rml::String executable_directory_path = Rml::String(path_buffer);
-	executable_directory_path = executable_directory_path.substr(0, executable_directory_path.rfind('\\') + 1);
+	Rml::String executable_path(executable_file_name);
+	executable_path = executable_path.substr(0, executable_path.rfind('\\') + 1);
 
-	// We assume we have found the correct path if we can find the lookup file from it.
+	// We assume we have found the correct path if we can find the lookup file from it
 	const char* lookup_file = "assets\\rml.rcss";
 
-	// Test the candidate paths relative to the executable folder, and the current working directory, respectively.
-	for (const Rml::String relative_target_path : candidate_paths)
+	for (const char* relative_path : candidate_paths)
 	{
-		const Rml::String absolute_target_path = executable_directory_path + relative_target_path;
-		const Rml::String absolute_lookup_path = absolute_target_path + lookup_file;
-		if (PathFileExistsA(absolute_lookup_path.c_str()))
+		Rml::String absolute_path = executable_path + relative_path;
+
+		if (PathFileExistsA(Rml::String(absolute_path + lookup_file).c_str()))
 		{
-			if (!PathCanonicalizeA(path_buffer, absolute_target_path.c_str()))
-			{
-				Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to canonicalize the path to the samples root: %s", absolute_target_path.c_str());
-				return {};
-			}
+			char canonical_path[MAX_PATH];
+			if (!PathCanonicalizeA(canonical_path, absolute_path.c_str()))
+				canonical_path[0] = 0;
 
-			return Rml::String(path_buffer);
-		}
-
-		const Rml::String relative_lookup_path = relative_target_path + lookup_file;
-		if (PathFileExistsA(relative_lookup_path.c_str()))
-		{
-			const DWORD working_directory_length = GetFullPathNameA(relative_target_path.c_str(), MAX_PATH, path_buffer, nullptr);
-			if (working_directory_length <= 0 || working_directory_length >= MAX_PATH)
-			{
-				Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to get the full path to the samples root: %s", relative_target_path.c_str());
-				return {};
-			}
-
-			return Rml::String(path_buffer);
+			return Rml::String(canonical_path);
 		}
 	}
 
@@ -112,28 +124,27 @@ Rml::String PlatformExtensions::FindSamplesRoot()
 
 #elif defined RMLUI_PLATFORM_UNIX
 
-	char path_buffer[PATH_MAX + 1];
-	ssize_t len = readlink("/proc/self/exe", path_buffer, PATH_MAX);
+	char executable_file_name[PATH_MAX];
+	ssize_t len = readlink("/proc/self/exe", executable_file_name, PATH_MAX);
 	if (len == -1)
 	{
 		Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to determine the executable path");
-		path_buffer[0] = 0;
+		executable_file_name[0] = 0;
 	}
 	else
 	{
 		// readlink() does not append a null byte to buf.
-		path_buffer[len] = 0;
+		executable_file_name[len] = 0;
 	}
-	Rml::String executable_directory_path = Rml::String(path_buffer);
-	executable_directory_path = executable_directory_path.substr(0, executable_directory_path.rfind("/") + 1);
+	Rml::String executable_path = Rml::String(executable_file_name);
+	executable_path = executable_path.substr(0, executable_path.rfind("/") + 1);
 
 	// We assume we have found the correct path if we can find the lookup file from it.
 	const char* lookup_file = "assets/rml.rcss";
 
 	// Test various relative paths to the "Samples" directory, based on common build and install locations.
 	const char* candidate_paths[] = {
-		"./",
-		"Samples/",
+		"",
 		"../",
 		"../Samples/",
 		"../share/Samples/",
@@ -146,26 +157,16 @@ Rml::String PlatformExtensions::FindSamplesRoot()
 		struct stat sb;
 		return stat(path.c_str(), &sb) == 0 && S_ISREG(sb.st_mode);
 	};
-	auto GetAbsoluteFilePath = [&](const Rml::String& path) -> Rml::String {
-		const char* absolute_path = realpath(path.c_str(), path_buffer);
-		if (!absolute_path)
-		{
-			Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to canonicalize the path to the samples root: %s", path.c_str());
-			return {};
-		}
-		return Rml::String(absolute_path) + '/';
-	};
 
-	for (const Rml::String relative_target_path : candidate_paths)
+	for (const char* relative_path : candidate_paths)
 	{
-		const Rml::String absolute_target_path = executable_directory_path + relative_target_path;
-		const Rml::String absolute_lookup_path = absolute_target_path + lookup_file;
-		if (isRegularFile(absolute_lookup_path))
-			return GetAbsoluteFilePath(absolute_target_path);
+		Rml::String absolute_path = executable_path + relative_path;
+		Rml::String absolute_lookup_file = absolute_path + lookup_file;
 
-		const Rml::String relative_lookup_path = relative_target_path + lookup_file;
-		if (isRegularFile(relative_lookup_path))
-			return GetAbsoluteFilePath(relative_target_path);
+		if (isRegularFile(absolute_lookup_file))
+		{
+			return absolute_path;
+		}
 	}
 
 	Rml::Log::Message(Rml::Log::LT_ERROR, "Failed to find the path to the samples root");

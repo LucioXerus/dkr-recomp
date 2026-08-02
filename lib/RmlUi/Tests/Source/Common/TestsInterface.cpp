@@ -1,3 +1,31 @@
+/*
+ * This source file is part of RmlUi, the HTML/CSS Interface Middleware
+ *
+ * For the latest information, see http://github.com/mikke89/RmlUi
+ *
+ * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
+ * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
 #include "TestsInterface.h"
 #include "TypesToString.h"
 #include <RmlUi/Core/Log.h>
@@ -11,10 +39,7 @@ TestsSystemInterface::~TestsSystemInterface()
 
 double TestsSystemInterface::GetElapsedTime()
 {
-	if (manual_time)
-		return elapsed_time;
-
-	return Rml::SystemInterface::GetElapsedTime();
+	return elapsed_time;
 }
 
 bool TestsSystemInterface::LogMessage(Rml::Log::Type type, const Rml::String& message)
@@ -61,18 +86,9 @@ void TestsSystemInterface::SetNumExpectedWarnings(int in_num_expected_warnings)
 	num_expected_warnings = in_num_expected_warnings;
 }
 
-void TestsSystemInterface::SetManualTime(double t)
+void TestsSystemInterface::SetTime(double t)
 {
-	manual_time = true;
 	elapsed_time = t;
-}
-
-void TestsSystemInterface::Reset()
-{
-	SetManualTime(0);
-	manual_time = false;
-
-	SetNumExpectedWarnings(0);
 }
 
 Rml::CompiledGeometryHandle TestsRenderInterface::CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices)
@@ -139,12 +155,9 @@ void TestsRenderInterface::RenderToClipMask(Rml::ClipMaskOperation /*mask_operat
 	counters.render_to_clip_mask += 1;
 }
 
-Rml::TextureHandle TestsRenderInterface::LoadTexture(Rml::Vector2i& texture_dimensions, const Rml::String& source)
+Rml::TextureHandle TestsRenderInterface::LoadTexture(Rml::Vector2i& texture_dimensions, const Rml::String& /*source*/)
 {
 	counters.load_texture += 1;
-	if (source.find("invalid") != Rml::String::npos)
-		return 0;
-
 	texture_dimensions.x = 512;
 	texture_dimensions.y = 256;
 	return 1;

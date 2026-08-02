@@ -1,8 +1,13 @@
-#pragma once
+#ifndef INVENTORY_H
+#define INVENTORY_H
 
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/Types.h>
+
+/**
+    @author Peter Curry
+ */
 
 class Inventory {
 public:
@@ -21,3 +26,5 @@ public:
 private:
 	Rml::ElementDocument* document;
 };
+
+#endif

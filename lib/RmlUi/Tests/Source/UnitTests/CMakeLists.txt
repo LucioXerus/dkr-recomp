@@ -3,29 +3,23 @@ set(TARGET_NAME "rmlui_unit_tests")
 add_executable(${TARGET_NAME}
 	Animation.cpp
 	Core.cpp
-	CustomProperties.cpp
 	DataBinding.cpp
 	DataExpression.cpp
 	DataModel.cpp
 	Debugger.cpp
 	Decorator.cpp
 	Element.cpp
-	ElementBackgroundBorder.cpp
 	ElementDocument.cpp
-	ElementHandle.cpp
-	ElementFormControlInput.cpp
 	ElementFormControlSelect.cpp
 	ElementImage.cpp
 	ElementStyle.cpp
 	EventListener.cpp
 	Filter.cpp
-	FlexFormatting.cpp
 	Layout.cpp
 	Localization.cpp
 	main.cpp
 	Math.cpp
 	MediaQuery.cpp
-	Navigation.cpp
 	Properties.cpp
 	PropertySpecification.cpp
 	Selectors.cpp
@@ -38,7 +32,6 @@ add_executable(${TARGET_NAME}
 	URL.cpp
 	Variant.cpp
 	XMLParser.cpp
-	PluginDataModel.cpp
 )
 
 set_common_target_options(${TARGET_NAME})

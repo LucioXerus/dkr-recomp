@@ -362,3 +362,11 @@ int main(int argc, const char** argv) {
     }
     return 0;
 }
+
+extern "C" void recomp_enter_function(const char* name, gpr address) {
+    
+}
+
+extern "C" void recomp_exit_function(void) {
+    
+}
